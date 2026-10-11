@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { explorerAddress } from '../lib/config';
-import { shortHex } from '../lib/format';
+import { getBalanceWei, requestTestTokens } from '../lib/chain';
+import { FAUCET_AMOUNT_LABEL, explorerAddress } from '../lib/config';
+import { formatGen, shortHex } from '../lib/format';
 import { useIdentity } from '../lib/identity';
 import { CopyButton, ExtLink } from './Bits';
 
@@ -9,7 +10,39 @@ export function IdentityMenu() {
   const { signer, hasWallet, busy, error, createSession, connectWallet, disconnect, forgetSession, exportSessionKey } = useIdentity();
   const [open, setOpen] = useState(false);
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [funding, setFunding] = useState(false);
+  const [fundingNote, setFundingNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const root = useRef<HTMLDivElement | null>(null);
+  const address = signer?.address ?? null;
+
+  const refreshBalance = useCallback(async (target: string): Promise<void> => {
+    try {
+      setBalance(formatGen(await getBalanceWei(target)));
+    } catch {
+      setBalance(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    setFundingNote(null);
+    if (open && address !== null) void refreshBalance(address);
+    else setBalance(null);
+  }, [open, address, refreshBalance]);
+
+  const getTestTokens = async (): Promise<void> => {
+    if (address === null) return;
+    setFunding(true);
+    setFundingNote(null);
+    const result = await requestTestTokens(address);
+    if (result.ok) {
+      setFundingNote({ tone: 'ok', text: `${FAUCET_AMOUNT_LABEL} of test GEN requested.` });
+      await refreshBalance(address);
+    } else {
+      setFundingNote({ tone: 'bad', text: result.reason });
+    }
+    setFunding(false);
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -73,11 +106,25 @@ export function IdentityMenu() {
                 <ExtLink href={explorerAddress(signer.address)}>View in explorer</ExtLink>
               </div>
 
+              <div className="identity__faucet">
+                <p className="identity__text">
+                  Balance: <strong className="mono">{balance === null ? '…' : `${balance} GEN`}</strong>
+                </p>
+                <button type="button" className="btn btn--small" onClick={() => void getTestTokens()} disabled={funding}>
+                  {funding ? 'Requesting…' : `Get ${FAUCET_AMOUNT_LABEL} of test tokens`}
+                </button>
+                {fundingNote && (
+                  <p className={fundingNote.tone === 'ok' ? 'identity__text' : 'field__error'} role="status">
+                    {fundingNote.text}
+                  </p>
+                )}
+              </div>
+
               {signer.kind === 'session' ? (
                 <>
                   <p className="identity__text">
-                    This key lives only in this browser and has no funds. Studionet is a test network. Export it to reuse the same
-                    identity elsewhere.
+                    This key lives only in this browser. Studionet is a test network and Goalpost does not need funds to work, but you
+                    can add test GEN above. Export the key to reuse the same identity elsewhere.
                   </p>
                   {revealed === null ? (
                     <button type="button" className="btn btn--small" onClick={() => setRevealed(exportSessionKey() ?? '')}>

@@ -162,3 +162,12 @@ export const FAILURE_EXPLANATION: Record<string, string> = {
 export function explainFlag(flag: string): string {
   return FLAG_EXPLANATION[flag] ?? 'This element could not be verified against the source.';
 }
+
+/** Wei as a GEN amount with up to `digits` decimals, trailing zeros trimmed. */
+export function formatGen(wei: bigint, digits = 3): string {
+  const unit = 10n ** 18n;
+  const whole = wei / unit;
+  const scale = 10n ** BigInt(18 - digits);
+  const fraction = ((wei % unit) / scale).toString().padStart(digits, '0').replace(/0+$/, '');
+  return fraction === '' ? whole.toString() : `${whole}.${fraction}`;
+}

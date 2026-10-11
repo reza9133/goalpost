@@ -61,3 +61,10 @@ for (const s of ['KEPT','MOVED_DISCLOSED','MOVED_SILENT','NOT_ADDRESSED','UNSUPP
 assert.match(F.explainFlag('anchors_intact_silent_claim_rejected'), /anchor/);
 assert.match(F.explainFlag('something_new'), /could not be verified/);
 console.log('client pure-logic checks passed');
+
+// --- formatGen: wei to a readable GEN amount
+assert.equal(F.formatGen(0n), '0');
+assert.equal(F.formatGen(100n * 10n ** 18n), '100');
+assert.equal(F.formatGen(1500000000000000000n), '1.5');
+assert.equal(F.formatGen(1234567890000000000n, 3), '1.234');
+assert.equal(F.formatGen(1000n), '0', 'dust below the displayed precision is not shown');

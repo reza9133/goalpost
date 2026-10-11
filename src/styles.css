@@ -1281,6 +1281,13 @@ code {
   color: var(--ink-2);
 }
 
+.identity__faucet {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+
 .txpanel {
   position: fixed;
   right: 1rem;

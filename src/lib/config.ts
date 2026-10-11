@@ -29,3 +29,10 @@ export const explorerAddress = (address: string): string => `${EXPLORER_URL}/add
 /** Approximate polling budget for one transaction to reach a decision. */
 export const TX_POLL_INTERVAL_MS = 3000;
 export const TX_TIMEOUT_MS = 8 * 60 * 1000;
+
+/** Public links shown in the console. */
+export const GITHUB_URL = 'https://github.com/reza9133/goalpost';
+
+/** Test GEN handed out by the faucet button, in wei (100 GEN). 1e20 is exact as a JSON number. */
+export const FAUCET_AMOUNT_WEI = 1e20;
+export const FAUCET_AMOUNT_LABEL = '100 GEN';

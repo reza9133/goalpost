@@ -14,6 +14,7 @@ import {
   CHAIN_NAME,
   CONTRACT_ADDRESS,
   EXPLORER_URL,
+  FAUCET_AMOUNT_WEI,
   PUBLIC_RPC_URL,
   RPC_URL,
   TX_POLL_INTERVAL_MS,
@@ -290,5 +291,45 @@ export async function ensureWalletChain(provider: EthereumProvider): Promise<voi
         },
       ],
     });
+  }
+}
+
+// ------------------------------------------------------------------------------ test tokens
+
+async function rpcCall(endpoint: string, method: string, params: unknown[]): Promise<unknown> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const body = (await response.json()) as { result?: unknown; error?: { message?: string } };
+  if (body.error) throw new Error(body.error.message || 'RPC error');
+  return body.result;
+}
+
+/** Balance of an address in wei. Read through the app RPC (the proxy allows eth_ methods). */
+export async function getBalanceWei(address: string): Promise<bigint> {
+  const result = await rpcCall(RPC_URL, 'eth_getBalance', [address, 'latest']);
+  return typeof result === 'string' ? BigInt(result) : 0n;
+}
+
+export type FaucetResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Ask Studionet to credit test GEN to an address. This uses the Studio-only `sim_fundAccount`
+ * method. It goes to the public RPC directly, never through the same-origin proxy, which refuses
+ * every `sim_` method on purpose. The tokens are worthless test funds on a resettable network.
+ */
+export async function requestTestTokens(address: string): Promise<FaucetResult> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return { ok: false, reason: 'That is not a valid address.' };
+  try {
+    await rpcCall(PUBLIC_RPC_URL, 'sim_fundAccount', [address, FAUCET_AMOUNT_WEI]);
+    return { ok: true };
+  } catch (cause) {
+    return {
+      ok: false,
+      reason: `The faucet did not answer (${messageOf(cause)}). Open studio.genlayer.com, use its faucet for ${address}, then come back.`,
+    };
   }
 }

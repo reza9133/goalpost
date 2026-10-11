@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 
-import { CHAIN_ID, CONTRACT_ADDRESS, EXPLORER_URL, IS_CONFIGURED, explorerAddress } from '../lib/config';
+import { CHAIN_ID, CONTRACT_ADDRESS, EXPLORER_URL, GITHUB_URL, IS_CONFIGURED, explorerAddress } from '../lib/config';
 import { shortHex } from '../lib/format';
 import { ExtLink, Notice } from './Bits';
 import { BrandMark } from './Brand';
@@ -59,6 +59,8 @@ export function Layout() {
             ) : (
               'No contract configured'
             )}
+            {' · '}
+            <ExtLink href={GITHUB_URL}>Source on GitHub</ExtLink>
           </p>
         </div>
       </footer>

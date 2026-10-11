@@ -29,7 +29,7 @@ Test names refer to files under `tests/`.
 | 17 | Partial state after a failure | A transaction that raises rolls all writes back | `test_a_failed_registration_leaves_no_trace`, `test_validators_that_judge_differently_block_the_verdict_and_nothing_is_written` |
 | 18 | Hash ambiguity (delimiter forgery) | Digests hash canonical JSON, never joined strings | `test_digest_has_no_delimiter_ambiguity` |
 | 19 | Unauthorised retirement | Only the registrant may retire; history stays on chain | `test_only_the_registrant_can_retire_and_history_survives` |
-| 20 | Abuse of the optional RPC proxy | Fixed upstream, standard method families only (the Studio `sim_` methods are never forwarded), same-origin only, size and batch caps | `tests/node/rpc_proxy.mjs` |
+| 20 | Abuse of the optional RPC proxy | Fixed upstream, standard method families only (the Studio `sim_` methods are never forwarded), same-origin only, size and batch caps. The in-app test-token button calls `sim_fundAccount` on the public RPC from the browser, never through this proxy | `tests/node/rpc_proxy.mjs` |
 
 ## Client-side
 

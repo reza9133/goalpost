@@ -22,6 +22,10 @@ Reported  We will cut our emissions intensity of Scope 1 and Scope 2 greenhouse 
 Target network: **GenLayer Studionet** (chain ID 61999). The web console is a static site built for
 **Cloudflare Pages**.
 
+- **Live site:** <https://goalpost-8wf.pages.dev/>
+- **Source:** <https://github.com/reza9133/goalpost>
+- **Contract:** `0xF9545b0b3A58F8e68F2D879E23A4Bc78A9B025B9` on Studionet, with a recorded end-to-end run in [`evidence/`](evidence/README.md)
+
 ## How it works
 
 1. **Freeze.** Someone names a public page and quotes the sentences that define a commitment. Every
@@ -137,6 +141,11 @@ throwaway key kept in your browser; Studionet is free) or connect a browser wall
 > The bundled demonstration documents are served from `/evidence`. Validators fetch pages from the
 > public internet, so they cannot read `localhost`. Use the console locally to browse and read, and
 > deploy it (next section) to freeze the demonstration pledges.
+
+**Test tokens.** The identity menu has a **Get 100 GEN of test tokens** button, so nobody has to
+visit the Studio site for a faucet. It calls the Studionet `sim_fundAccount` method on the public
+RPC. That call never goes through the optional `/rpc` proxy, which refuses every `sim_` method on
+purpose. The tokens have no value and the network can be reset.
 
 ### 5. Deploy the site to Cloudflare Pages
 
