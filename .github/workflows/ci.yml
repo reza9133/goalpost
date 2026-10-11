@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  contract-and-logic:
+    name: Contract and client logic tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run the test suite
+        run: python -m unittest discover -s tests -t tests -v
+
+  lint-contract:
+    name: GenVM linter
+    runs-on: ubuntu-latest
+    # The linter downloads GenVM artifacts and its rules track the SDK. Treat the first runs as
+    # advisory, then remove continue-on-error once it has been green on your fork.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install genvm-linter
+      - run: genvm-lint check contracts/goalpost.py
+
+  web:
+    name: Type-check and build the web console
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          VITE_CONTRACT_ADDRESS: '0x0000000000000000000000000000000000000001'
