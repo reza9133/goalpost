@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+.env
+.env.local
+.env.*.local
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+artifacts/*
+!artifacts/.gitkeep

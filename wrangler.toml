@@ -1,0 +1,4 @@
+# Cloudflare Pages configuration. Used by `npx wrangler pages deploy` and by Git-connected projects.
+name = "goalpost"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "dist"

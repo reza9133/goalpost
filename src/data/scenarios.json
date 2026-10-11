@@ -1,0 +1,130 @@
+{
+  "scenarios": [
+    {
+      "id": "meridian",
+      "title": "Meridian Grid climate pledge",
+      "kind": "climate",
+      "summary": "A regional utility pledges an absolute emissions cut. Three reports show a faithful restatement, a silent redefinition, a disclosed revision and an incomplete report.",
+      "pledge_path": "/evidence/meridian/pledge.html",
+      "report_prefix_path": "/evidence/meridian/reports/",
+      "elements": [
+        {
+          "key": "emissions_target",
+          "dimension": "target",
+          "quote": "We will cut our absolute Scope 1 and Scope 2 greenhouse gas emissions by 40% by 2030, measured against our 2019 baseline.",
+          "anchors": [
+            "absolute",
+            "40%",
+            "2030",
+            "2019"
+          ]
+        },
+        {
+          "key": "target_scope",
+          "dimension": "scope",
+          "quote": "The target applies to every wholly owned power plant and excludes no facility.",
+          "anchors": [
+            "every wholly owned",
+            "excludes no facility"
+          ]
+        },
+        {
+          "key": "assurance",
+          "dimension": "method",
+          "quote": "Progress will be verified each year by an independent third-party assurance provider.",
+          "anchors": [
+            "independent third-party"
+          ]
+        }
+      ],
+      "reports": [
+        {
+          "id": "faithful",
+          "label": "Faithful restatement",
+          "period": "FY2026",
+          "path": "/evidence/meridian/reports/2026-faithful.html",
+          "expected": "KEPT"
+        },
+        {
+          "id": "silent",
+          "label": "Silent redefinition",
+          "period": "FY2026",
+          "path": "/evidence/meridian/reports/2026-silent.html",
+          "expected": "MOVED_SILENTLY"
+        },
+        {
+          "id": "disclosed",
+          "label": "Disclosed revision",
+          "period": "FY2026",
+          "path": "/evidence/meridian/reports/2026-disclosed.html",
+          "expected": "MOVED_DISCLOSED"
+        },
+        {
+          "id": "partial",
+          "label": "Leaves commitments out",
+          "period": "FY2026",
+          "path": "/evidence/meridian/reports/2026-partial.html",
+          "expected": "INCOMPLETE"
+        }
+      ]
+    },
+    {
+      "id": "halden",
+      "title": "Halden trial protocol",
+      "kind": "research",
+      "summary": "A preregistered clinical trial protocol. Final reports either follow it, silently switch the primary outcome, or disclose their deviations.",
+      "pledge_path": "/evidence/halden/pledge.html",
+      "report_prefix_path": "/evidence/halden/reports/",
+      "elements": [
+        {
+          "key": "primary_outcome",
+          "dimension": "target",
+          "quote": "The primary outcome is the change in seated systolic blood pressure from baseline to week 12.",
+          "anchors": [
+            "systolic blood pressure",
+            "week 12"
+          ]
+        },
+        {
+          "key": "sample_size",
+          "dimension": "scope",
+          "quote": "The trial will enrol 240 participants, randomised 1:1.",
+          "anchors": [
+            "240 participants"
+          ]
+        },
+        {
+          "key": "analysis_plan",
+          "dimension": "method",
+          "quote": "The primary analysis will follow the intention-to-treat principle.",
+          "anchors": [
+            "intention-to-treat"
+          ]
+        }
+      ],
+      "reports": [
+        {
+          "id": "faithful",
+          "label": "Follows the protocol",
+          "period": "Final report",
+          "path": "/evidence/halden/reports/final-faithful.html",
+          "expected": "KEPT"
+        },
+        {
+          "id": "silent",
+          "label": "Silent outcome switch",
+          "period": "Final report",
+          "path": "/evidence/halden/reports/final-silent.html",
+          "expected": "MOVED_SILENTLY"
+        },
+        {
+          "id": "disclosed",
+          "label": "Disclosed deviations",
+          "period": "Final report",
+          "path": "/evidence/halden/reports/final-disclosed.html",
+          "expected": "MOVED_DISCLOSED"
+        }
+      ]
+    }
+  ]
+}
