@@ -25,16 +25,26 @@ interface RedlinePairProps {
 export function RedlinePair({ pledged, reported, pledgedLabel = 'Pledged', reportedLabel = 'Reported' }: RedlinePairProps) {
   const diff = useMemo(() => redline(pledged, reported), [pledged, reported]);
   const hasReport = reported.trim().length > 0;
+  const pct = Math.round(diff.overlap * 100);
+
+  const overlapColor = pct >= 80 ? 'var(--held)' : pct >= 50 ? 'var(--revised)' : 'var(--moved)';
+
   return (
     <div className="redline">
       <figure className="redline__side">
-        <figcaption>{pledgedLabel}</figcaption>
+        <figcaption style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--ink)' }} />
+          <span>{pledgedLabel}</span>
+        </figcaption>
         <blockquote className="quote">
           <Tokens tokens={diff.left} side="removed" />
         </blockquote>
       </figure>
       <figure className="redline__side">
-        <figcaption>{reportedLabel}</figcaption>
+        <figcaption style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: hasReport ? 'var(--moved)' : 'var(--neutral)' }} />
+          <span>{reportedLabel}</span>
+        </figcaption>
         {hasReport ? (
           <blockquote className="quote">
             <Tokens tokens={diff.right} side="added" />
@@ -44,10 +54,41 @@ export function RedlinePair({ pledged, reported, pledgedLabel = 'Pledged', repor
         )}
       </figure>
       {hasReport && (
-        <p className="redline__foot muted">
-          Wording overlap {Math.round(diff.overlap * 100)}%. Marked words differ between the two texts; this view is for reading only and
-          does not decide the verdict.
-        </p>
+        <div className="redline__foot" style={{ marginTop: '0.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span className="mono" style={{ fontWeight: 600, color: overlapColor, fontSize: '0.85rem' }}>
+                {pct}%
+              </span>
+              <span className="muted" style={{ fontSize: '0.82rem' }}>wording overlap</span>
+            </div>
+            <div
+              style={{
+                flex: '1',
+                minWidth: '60px',
+                maxWidth: '120px',
+                height: '4px',
+                background: 'var(--sunken)',
+                borderRadius: '2px',
+                overflow: 'hidden',
+              }}
+              title={`${pct}% wording overlap`}
+            >
+              <div
+                style={{
+                  width: `${pct}%`,
+                  height: '100%',
+                  background: overlapColor,
+                  borderRadius: '2px',
+                  transition: 'width 0.4s ease',
+                }}
+              />
+            </div>
+            <span className="muted" style={{ fontSize: '0.78rem' }}>
+              Marked words differ; this comparison is for review only and does not solely decide verdicts.
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -5,7 +5,12 @@ import { shortHex } from '../lib/format';
 import { useTx } from '../lib/tx';
 import { ExtLink } from './Bits';
 
-const STEPS = ['Signature', 'Queue', 'Validators', 'Decision'] as const;
+const STEPS = [
+  { name: 'Signature', label: '1. Sign' },
+  { name: 'Queue', label: '2. Queue' },
+  { name: 'Validators', label: '3. Consensus' },
+  { name: 'Decision', label: '4. Settle' },
+] as const;
 
 function stepIndex(phase: string): number {
   if (phase === 'signing') return 0;
@@ -41,36 +46,54 @@ export function TxPanel() {
   return (
     <aside className={`txpanel${failed ? ' txpanel--failed' : ''}${done ? ' txpanel--done' : ''}`} role="status" aria-live="polite">
       <div className="txpanel__head">
-        <strong>{state.label}</strong>
-        <span className="txpanel__clock">{clock(elapsed)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {busy && (
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: 'var(--revised)',
+                boxShadow: '0 0 8px var(--revised)',
+                animation: 'pulse 1s infinite alternate',
+              }}
+            />
+          )}
+          {done && <span style={{ color: 'var(--held)' }}>✓</span>}
+          {failed && <span style={{ color: 'var(--moved)' }}>⚠</span>}
+          <strong>{state.label}</strong>
+        </div>
+        <span className="txpanel__clock">⏱ {clock(elapsed)}</span>
       </div>
 
       <ol className="steps">
         {STEPS.map((step, index) => {
           const status = failed && index === current ? 'failed' : index < current || done ? 'done' : index === current ? 'active' : 'todo';
           return (
-            <li key={step} className={`steps__item steps__item--${status}`}>
-              {step}
+            <li key={step.name} className={`steps__item steps__item--${status}`}>
+              <span>{status === 'done' ? '✓ ' : ''}{step.label}</span>
             </li>
           );
         })}
       </ol>
 
       <p className="txpanel__text">
-        {busy && state.phase === 'signing' && 'Waiting for the signature.'}
-        {busy && state.phase !== 'signing' && 'Validators are fetching the evidence and reaching agreement. This usually takes one to three minutes.'}
-        {done && 'Recorded on Studionet.'}
+        {busy && state.phase === 'signing' && 'Waiting for your signature in browser / session key…'}
+        {busy && state.phase !== 'signing' && 'GenLayer validators are independently fetching the documents and agreeing on the verdict. This usually takes 1–3 minutes.'}
+        {done && 'Transaction settled and verified on Studionet!'}
         {failed && (state.message ?? 'The transaction did not complete.')}
       </p>
 
       <div className="txpanel__foot">
         {state.hash ? (
-          <ExtLink href={explorerTx(state.hash)}>{`Transaction ${shortHex(state.hash, 8, 6)}`}</ExtLink>
+          <ExtLink href={explorerTx(state.hash)}>
+            <span>TX {shortHex(state.hash, 8, 6)} ↗</span>
+          </ExtLink>
         ) : (
-          <span className="muted">No transaction yet</span>
+          <span className="muted">Pending hash…</span>
         )}
         <button type="button" className="btn btn--quiet btn--small" onClick={dismiss}>
-          {busy ? 'Stop watching' : 'Dismiss'}
+          {busy ? 'Run in background' : 'Dismiss'}
         </button>
       </div>
     </aside>

@@ -112,7 +112,6 @@ export function PledgePage() {
   };
 
   const integrity = pledge.integrity;
-  // Edit episodes have their own record; older pledges only have the rolling log to go on.
   const lastEdit = integrity.edits?.length
     ? integrity.edits[integrity.edits.length - 1]
     : [...integrity.log].reverse().find((entry) => entry.result === 'EDITED');
@@ -120,43 +119,45 @@ export function PledgePage() {
   return (
     <>
       <p className="crumbs">
-        <Link to="/">Ledger</Link> / {pledge.pledge_id}
+        <Link to="/">Ledger</Link> <span aria-hidden="true">›</span> {pledge.pledge_id}
       </p>
 
       <header className="pledge-head">
         <div>
           <h1 className="display display--page">{pledge.title}</h1>
-          <div className="row row--tight">
+          <div className="row row--tight" style={{ marginTop: '0.4rem' }}>
             <StandingChip standing={pledge.standing} />
             <Chip tone="neutral">{KIND_LABEL[pledge.kind]}</Chip>
             {!active && <Chip tone="neutral">Retired</Chip>}
           </div>
         </div>
         <div className="pledge-head__tally">
-          <span className="muted">Silent moves found</span>
+          <span className="muted">Permanent silent moves</span>
           <Strikes count={pledge.strikes} />
         </div>
       </header>
 
       <dl className="facts">
         <div>
-          <dt>Pledge page</dt>
+          <dt>Pledge source</dt>
           <dd>
-            <ExtLink href={pledge.pledge_url}>{hostOf(pledge.pledge_url) + pathOf(pledge.pledge_url)}</ExtLink>
+            <ExtLink href={pledge.pledge_url}>
+              {hostOf(pledge.pledge_url) + pathOf(pledge.pledge_url)} ↗
+            </ExtLink>
           </dd>
         </div>
         <div>
-          <dt>Reports must be under</dt>
+          <dt>Audit scope prefix</dt>
           <dd className="mono">{pledge.report_prefix}</dd>
         </div>
         <div>
           <dt>Registered</dt>
           <dd>
-            {formatDateTime(pledge.registered_at)} by <ExtLink href={explorerAddress(pledge.owner)}>{shortHex(pledge.owner, 8, 6)}</ExtLink>
+            {formatDateTime(pledge.registered_at)} by <ExtLink href={explorerAddress(pledge.owner)}>{shortHex(pledge.owner, 8, 6)} ↗</ExtLink>
           </dd>
         </div>
         <div>
-          <dt>Commitment</dt>
+          <dt>Commitment hash</dt>
           <dd>
             <HashValue value={pledge.commitment} />
           </dd>
@@ -166,25 +167,39 @@ export function PledgePage() {
       <section className="section" aria-labelledby="frozen-title">
         <div className="section__head">
           <h2 id="frozen-title">Frozen definition</h2>
-          <span className="muted">{plural(pledge.elements.length, 'element')}, verified on the page by validators at registration</span>
+          <span className="muted">{plural(pledge.elements.length, 'element')}, verified on source page by GenLayer at registration</span>
         </div>
         <ol className="elements">
-          {pledge.elements.map((element) => (
-            <li key={element.key} className="element">
+          {pledge.elements.map((element, idx) => (
+            <li key={element.key} className="element" style={{ animationDelay: `${idx * 60}ms` }}>
               <div className="element__head">
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '4px',
+                    background: 'var(--sunken)',
+                    color: 'var(--ink-2)',
+                  }}
+                >
+                  #{idx + 1}
+                </span>
                 <strong>{DIMENSION_LABEL[element.dimension]}</strong>
-                <code>{element.key}</code>
+                <code style={{ fontSize: '0.8rem', background: 'rgba(var(--ink-rgb), 0.04)', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>
+                  {element.key}
+                </code>
               </div>
               <blockquote className="quote">{element.quote}</blockquote>
               {element.anchors.length > 0 && (
-                <p className="anchors">
-                  <span className="muted">Anchors</span>
+                <div className="anchors" style={{ marginTop: '0.85rem' }}>
+                  <span className="muted" style={{ fontSize: '0.8rem' }}>Definition Anchors:</span>
                   {element.anchors.map((anchor) => (
                     <span className="anchor" key={anchor}>
-                      {anchor}
+                      🏷 {anchor}
                     </span>
                   ))}
-                </p>
+                </div>
               )}
             </li>
           ))}
@@ -193,10 +208,15 @@ export function PledgePage() {
 
       <section className="section" aria-labelledby="integrity-title">
         <div className="section__head">
-          <h2 id="integrity-title">Has the pledge page been edited?</h2>
+          <h2 id="integrity-title">Pledge page integrity check</h2>
           {active && (
-            <button type="button" className="btn btn--small" disabled={tx.busy || !signer} onClick={() => void verify()}>
-              Re-verify the pledge page
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={tx.busy || !signer}
+              onClick={() => void verify()}
+            >
+              🔄 Re-verify live page
             </button>
           )}
         </div>
@@ -206,12 +226,12 @@ export function PledgePage() {
             <p>
               Validators found {plural(lastEdit?.missing.length ?? 0, 'frozen quote')} missing on {formatDateTime(lastEdit?.at ?? 0)}.
               The frozen definition above is unaffected, and {plural(integrity.edits_detected, 'edit')} {integrity.edits_detected === 1 ? 'has' : 'have'}{' '}
-              been recorded permanently.
+              been permanently logged.
             </p>
           </Notice>
         ) : (
           <p className="muted">
-            Validators last confirmed every frozen quote on {formatDateTime(integrity.checked_at)}.
+            ✓ Validators last confirmed all frozen quotes are intact on {formatDateTime(integrity.checked_at)}.
             {integrity.edits_detected > 0 && ` ${plural(integrity.edits_detected, 'earlier edit')} remain on record.`}
           </p>
         )}
@@ -227,17 +247,17 @@ export function PledgePage() {
             </li>
           ))}
         </ul>
-        {!signer && active && <p className="field__hint">Choose an identity at the top right to request a re-verification.</p>}
+        {!signer && active && <p className="field__hint">Choose an identity at the top right to trigger a network re-verification.</p>}
       </section>
 
       <section className="section" aria-labelledby="audits-title">
         <div className="section__head">
-          <h2 id="audits-title">Reports</h2>
+          <h2 id="audits-title">Audited Reports</h2>
           <span className="muted">{plural(audits.length, 'report')} submitted</span>
         </div>
 
         {audits.length === 0 ? (
-          <p className="muted">No report has been submitted for this pledge.</p>
+          <p className="muted">No report has been submitted for this pledge yet.</p>
         ) : (
           <ul className="audits">
             {audits.map((audit) => (
@@ -257,11 +277,11 @@ export function PledgePage() {
                       disabled={tx.busy || !signer || !active}
                       onClick={() => void evaluate(audit.audit_id)}
                     >
-                      Evaluate
+                      ⚡ Evaluate
                     </button>
                   ) : (
                     <Link className="btn btn--small" to={`/audits/${audit.audit_id}`}>
-                      Open
+                      View Audit →
                     </Link>
                   )}
                 </div>
@@ -272,15 +292,14 @@ export function PledgePage() {
 
         {active && (
           <form className="form form--inline" onSubmit={(event) => void submit(event)} noValidate>
-            <h3>Submit a report</h3>
+            <h3>Submit a new report for audit</h3>
             <p className="field__hint">
-              Anyone may submit a report and anyone may evaluate it. Submitting is cheap and checks the address only; evaluating asks the
-              validators to read the report. The address must sit under the reporting prefix, with no query string and no <code>..</code> or
+              Anyone may submit a report and evaluate it. The address must sit under the reporting prefix, with no query string and no <code>..</code> or
               encoded dots in the path.
             </p>
             {scenario && prefixOrigin && (
-              <div className="row row--tight">
-                <span className="muted">Demonstration reports:</span>
+              <div className="row row--tight" style={{ alignItems: 'center', marginTop: '0.35rem' }}>
+                <span className="muted" style={{ fontSize: '0.84rem' }}>Quick-fill demo reports:</span>
                 {scenario.reports.map((report) => {
                   const url = prefixOrigin + report.path;
                   return (
@@ -293,6 +312,7 @@ export function PledgePage() {
                         setReportUrl(url);
                         setPeriod(report.period);
                       }}
+                      style={{ fontSize: '0.78rem' }}
                     >
                       {report.label}
                     </button>
@@ -303,7 +323,7 @@ export function PledgePage() {
             <div className="grid-2 grid-2--wide-first">
               <div className="field">
                 <label className="field__label" htmlFor="report-url">
-                  Report URL
+                  Report Document URL
                 </label>
                 <input
                   id="report-url"
@@ -318,22 +338,22 @@ export function PledgePage() {
               </div>
               <div className="field">
                 <label className="field__label" htmlFor="period">
-                  Period
+                  Report Period
                 </label>
                 <input
                   id="period"
                   className="input"
                   value={period}
                   onChange={(event) => setPeriod(event.target.value)}
-                  placeholder="FY2026"
+                  placeholder="e.g. FY2026"
                   aria-invalid={Boolean(periodIssue)}
                 />
                 {periodIssue && <p className="field__error">{periodIssue}</p>}
               </div>
             </div>
             <RequireIdentity>
-              <button type="submit" className="btn btn--primary" disabled={tx.busy}>
-                Submit report
+              <button type="submit" className="btn btn--primary" disabled={tx.busy} style={{ alignSelf: 'start' }}>
+                Submit report to queue
               </button>
             </RequireIdentity>
           </form>
@@ -343,7 +363,7 @@ export function PledgePage() {
       {isOwner && active && (
         <section className="section section--quiet" aria-label="Registrant controls">
           <p className="muted">
-            You registered this pledge. Retiring it stops new audits; the record and its history stay on chain.
+            You registered this pledge. Retiring it stops new audits; the record and its history stay on chain permanently.
           </p>
           <button type="button" className="btn btn--danger btn--small" disabled={tx.busy} onClick={() => void retire()}>
             Retire this pledge

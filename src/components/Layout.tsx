@@ -27,7 +27,7 @@ export function Layout() {
             <NavLink to="/how">How it works</NavLink>
           </nav>
           <span className="netpill" title={`GenLayer Studionet, chain ID ${CHAIN_ID}`}>
-            Studionet
+            ● Studionet
           </span>
           <IdentityMenu />
         </div>

@@ -33,7 +33,7 @@ export function LedgerPage() {
             Goalpost freezes the definition of a public pledge on GenLayer, then checks every later report against it. Validators fetch the
             evidence themselves and must agree on whether the goalposts moved.
           </p>
-          <div className="row">
+          <div className="row" style={{ marginTop: '0.5rem' }}>
             <Link className="btn btn--primary" to="/new">
               Register a pledge
             </Link>
@@ -84,7 +84,7 @@ export function LedgerPage() {
               Register a public pledge to freeze its definition. Try one of the bundled demonstration documents; they are served from this
               site so validators can read them.
             </p>
-            <div className="row">
+            <div className="row" style={{ justifyContent: 'center' }}>
               {SCENARIOS.map((scenario) => (
                 <Link key={scenario.id} className="btn" to={`/new?scenario=${scenario.id}`}>
                   {scenario.title}
@@ -103,8 +103,14 @@ export function LedgerPage() {
               <span role="columnheader">Audits</span>
               <span role="columnheader">Registered</span>
             </div>
-            {items.map((pledge) => (
-              <Link key={pledge.pledge_id} className="ledger__row" to={`/pledges/${pledge.pledge_id}`} role="row">
+            {items.map((pledge, index) => (
+              <Link
+                key={pledge.pledge_id}
+                className="ledger__row"
+                to={`/pledges/${pledge.pledge_id}`}
+                role="row"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
                 <span className="ledger__title" role="cell">
                   <strong>{pledge.title}</strong>
                   <span className="muted">
@@ -133,7 +139,7 @@ export function LedgerPage() {
         {total > PAGE_SIZE && (
           <div className="pager">
             <button type="button" className="btn btn--small" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
-              Newer
+              ← Newer
             </button>
             <span className="muted">
               {offset + 1} to {Math.min(total, offset + PAGE_SIZE)} of {total}
@@ -144,7 +150,7 @@ export function LedgerPage() {
               disabled={offset + PAGE_SIZE >= total}
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
-              Older
+              Older →
             </button>
           </div>
         )}

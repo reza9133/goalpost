@@ -31,18 +31,23 @@ function AnchorList({ element, excerpt }: { element: FrozenElement; excerpt: str
   if (element.anchors.length === 0) return null;
   const haystack = normalize(excerpt);
   return (
-    <p className="anchors">
-      <span className="muted">Anchors in the report text</span>
+    <div className="anchors" style={{ marginTop: '0.8rem' }}>
+      <span className="muted" style={{ fontSize: '0.8rem' }}>Report anchor verification:</span>
       {element.anchors.map((anchor) => {
         const present = excerpt.length > 0 && haystack.includes(normalize(anchor));
         return (
-          <span key={anchor} className={present ? 'anchor anchor--present' : 'anchor anchor--missing'}>
+          <span
+            key={anchor}
+            className={present ? 'anchor anchor--present' : 'anchor anchor--missing'}
+            title={present ? 'Found in report text' : 'Missing from report text'}
+          >
+            {present ? '✓ ' : '✗ '}
             {anchor}
             <span className="sr-only">{present ? ' (present)' : ' (missing)'}</span>
           </span>
         );
       })}
-    </p>
+    </div>
   );
 }
 
@@ -50,33 +55,60 @@ function ElementCard({ element, result }: { element: FrozenElement; result: Audi
   return (
     <li className="element element--audit">
       <div className="element__head">
-        <strong>{DIMENSION_LABEL[element.dimension]}</strong>
-        <code>{element.key}</code>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <strong>{DIMENSION_LABEL[element.dimension]}</strong>
+          <code style={{ fontSize: '0.8rem', background: 'rgba(var(--ink-rgb), 0.04)', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>
+            {element.key}
+          </code>
+        </div>
         <StatusChip status={result.status} />
       </div>
 
       {result.status === 'NOT_ADDRESSED' ? (
-        <>
+        <div style={{ margin: '0.75rem 0' }}>
           <blockquote className="quote">{element.quote}</blockquote>
-          <p className="muted">The report does not address this commitment.</p>
-        </>
+          <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.88rem' }}>
+            ℹ The submitted report does not address this commitment.
+          </p>
+        </div>
       ) : (
-        <RedlinePair pledged={element.quote} reported={result.report_excerpt} />
+        <div style={{ margin: '0.75rem 0' }}>
+          <RedlinePair pledged={element.quote} reported={result.report_excerpt} />
+        </div>
       )}
 
       {result.disclosure_excerpt && (
-        <figure className="disclosure">
-          <figcaption>Where the report acknowledges the change</figcaption>
-          <blockquote className="quote">{result.disclosure_excerpt}</blockquote>
+        <figure
+          className="disclosure"
+          style={{
+            background: 'rgba(var(--revised-ink), 0.04)',
+            borderLeft: '3px solid var(--revised)',
+            padding: '0.65rem 1rem',
+            borderRadius: '0 6px 6px 0',
+          }}
+        >
+          <figcaption style={{ fontSize: '0.78rem', color: 'var(--revised-ink)', fontWeight: 600 }}>
+            Where the report acknowledges the change:
+          </figcaption>
+          <blockquote className="quote" style={{ border: 'none', background: 'transparent', padding: 0, marginTop: '0.25rem' }}>
+            {result.disclosure_excerpt}
+          </blockquote>
         </figure>
       )}
 
       {result.status !== 'NOT_ADDRESSED' && <AnchorList element={element} excerpt={result.report_excerpt} />}
 
-      {result.flag && <Notice title="Why this element is not verifiable">{explainFlag(result.flag)}</Notice>}
+      {result.flag && (
+        <div style={{ marginTop: '0.85rem' }}>
+          <Notice tone="warn" title="Why this element is not verifiable">
+            {explainFlag(result.flag)}
+          </Notice>
+        </div>
+      )}
+
       {result.reason && (
-        <p className="muted element__reason">
-          Model note, not part of the verdict: {result.reason}
+        <p className="muted element__reason" style={{ fontSize: '0.82rem', marginTop: '0.6rem' }}>
+          Validator model note: {result.reason}
         </p>
       )}
     </li>
@@ -136,7 +168,7 @@ export function AuditPage() {
   return (
     <>
       <p className="crumbs">
-        <Link to="/">Ledger</Link> / <Link to={`/pledges/${pledge.pledge_id}`}>{pledge.pledge_id}</Link> / {audit.audit_id}
+        <Link to="/">Ledger</Link> <span aria-hidden="true">›</span> <Link to={`/pledges/${pledge.pledge_id}`}>{pledge.pledge_id}</Link> <span aria-hidden="true">›</span> {audit.audit_id}
       </p>
 
       {settled && verdict ? (
@@ -149,64 +181,78 @@ export function AuditPage() {
           </h1>
           <p className="lede">{VERDICT_EXPLANATION[verdict]}</p>
           {audit.silent_keys.length > 0 && (
-            <p className="verdict__detail">
-              Moved silently:{' '}
-              {audit.silent_keys.map((key) => (
-                <Fragment key={key}>
-                  <code className="verdict__key">{key}</code>{' '}
-                </Fragment>
-              ))}
-            </p>
+            <div className="verdict__detail" style={{ marginTop: '0.8rem' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--moved-ink)', fontWeight: 600, marginRight: '0.5rem' }}>
+                Moved silently without disclosure:
+              </span>
+              <div style={{ display: 'inline-flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {audit.silent_keys.map((key) => (
+                  <code key={key} className="verdict__key">
+                    ⚠ {key}
+                  </code>
+                ))}
+              </div>
+            </div>
           )}
           {audit.failure_reason && (
-            <p className="muted">{FAILURE_EXPLANATION[audit.failure_reason] ?? `The report could not be read (${audit.failure_reason}).`}</p>
+            <p className="muted" style={{ marginTop: '0.5rem' }}>
+              {FAILURE_EXPLANATION[audit.failure_reason] ?? `The report could not be read (${audit.failure_reason}).`}
+            </p>
           )}
         </section>
       ) : (
         <section className="verdict verdict--neutral" aria-labelledby="verdict-title">
           <div className="verdict__chip">
-            <Chip tone="neutral">Awaiting evaluation</Chip>
+            <Chip tone="neutral">Awaiting GenLayer Evaluation</Chip>
           </div>
           <h1 id="verdict-title" className="display display--page">
-            This report has not been evaluated yet.
+            This report is queued for validator evaluation.
           </h1>
           <p className="lede">
-            Evaluating asks the validators to fetch the report, classify each frozen element, and agree on the result. It usually takes one
-            to three minutes.
+            Evaluating asks the decentralized validators to independently fetch the report, classify each frozen element against the original pledge, and agree on the result.
           </p>
           <RequireIdentity>
-            <button type="button" className="btn btn--primary" disabled={tx.busy || pledge.status !== 'ACTIVE'} onClick={() => void evaluate()}>
-              {tx.busy ? 'Waiting for the network' : 'Evaluate this report'}
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={tx.busy || pledge.status !== 'ACTIVE'}
+              onClick={() => void evaluate()}
+              style={{ marginTop: '0.5rem', padding: '0.75rem 1.4rem' }}
+            >
+              {tx.busy ? 'Evaluating on network…' : '⚡ Trigger validator consensus'}
             </button>
           </RequireIdentity>
-          {signer === null && <p className="field__hint">Reading this page never needs an identity; evaluating does.</p>}
+          {signer === null && <p className="field__hint" style={{ marginTop: '0.5rem' }}>Reading is open to all; triggering evaluation requires choosing an identity.</p>}
         </section>
       )}
 
       <dl className="facts">
         <div>
-          <dt>Pledge</dt>
+          <dt>Audited Pledge</dt>
           <dd>
-            <Link to={`/pledges/${pledge.pledge_id}`}>{pledge.title}</Link>
+            <Link to={`/pledges/${pledge.pledge_id}`} style={{ fontWeight: 600 }}>{pledge.title} →</Link>
           </dd>
         </div>
         <div>
-          <dt>Report</dt>
+          <dt>Report Source</dt>
           <dd>
-            <ExtLink href={audit.report_url}>{hostOf(audit.report_url) + pathOf(audit.report_url)}</ExtLink>, {audit.period}
+            <ExtLink href={audit.report_url}>
+              {hostOf(audit.report_url) + pathOf(audit.report_url)} ↗
+            </ExtLink>
+            <span style={{ marginLeft: '0.4rem', opacity: 0.8 }}>({audit.period})</span>
           </dd>
         </div>
         <div>
-          <dt>Submitted</dt>
+          <dt>Submission</dt>
           <dd>
-            {formatDateTime(audit.submitted_at)} by <ExtLink href={explorerAddress(audit.submitted_by)}>{shortHex(audit.submitted_by, 8, 6)}</ExtLink>
+            {formatDateTime(audit.submitted_at)} by <ExtLink href={explorerAddress(audit.submitted_by)}>{shortHex(audit.submitted_by, 8, 6)} ↗</ExtLink>
           </dd>
         </div>
         {settled && (
           <div>
-            <dt>Evaluated</dt>
+            <dt>Evaluation Settled</dt>
             <dd>
-              {formatDateTime(audit.evaluated_at)} by <ExtLink href={explorerAddress(audit.evaluated_by)}>{shortHex(audit.evaluated_by, 8, 6)}</ExtLink>
+              {formatDateTime(audit.evaluated_at)} by <ExtLink href={explorerAddress(audit.evaluated_by)}>{shortHex(audit.evaluated_by, 8, 6)} ↗</ExtLink>
             </dd>
           </div>
         )}
@@ -215,8 +261,8 @@ export function AuditPage() {
       {settled && audit.elements.length > 0 && (
         <section className="section" aria-labelledby="elements-title">
           <div className="section__head">
-            <h2 id="elements-title">Element by element</h2>
-            <span className="muted">Every quoted excerpt was checked against the report by the validators</span>
+            <h2 id="elements-title">Element-by-element consensus</h2>
+            <span className="muted">Each excerpt was verified verbatim against the report by GenLayer validators</span>
           </div>
           <ol className="elements">
             {pledge.elements.map((element) => {
@@ -228,23 +274,40 @@ export function AuditPage() {
       )}
 
       {settled && audit.attestation && (
-        <section className="section" aria-labelledby="attestation-title">
-          <div className="section__head">
-            <h2 id="attestation-title">Attestation</h2>
+        <section
+          className="section"
+          aria-labelledby="attestation-title"
+          style={{
+            background: 'rgba(var(--surface-rgb), 0.7)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '1.75rem',
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div className="section__head" style={{ borderBottom: 'none', marginBottom: '0.5rem', paddingBottom: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '1.25rem' }}>🔒</span>
+              <h2 id="attestation-title" style={{ margin: 0 }}>Cryptographic Attestation</h2>
+            </div>
           </div>
-          <p className="muted">
-            A hash that binds the frozen pledge, the report address, the verdict and every cited excerpt. Anyone can recompute it from public
-            state, so a copy of it can travel without needing to be trusted.
+          <p className="muted" style={{ maxWidth: '48rem', fontSize: '0.88rem' }}>
+            A deterministic hash that binds the frozen pledge, the report document, the final verdict, and every cited excerpt. Anyone can independently recompute it from public on-chain state to verify integrity without trusting any third party.
           </p>
-          <p>
-            <HashValue value={audit.attestation} head={14} tail={10} />
-          </p>
-          <div className="row">
-            <button type="button" className="btn btn--small" onClick={() => void verify()} disabled={check.state === 'checking'}>
-              {check.state === 'checking' ? 'Recomputing' : 'Recompute on the network'}
+          <div style={{ margin: '1rem 0' }}>
+            <HashValue value={audit.attestation} head={18} tail={14} />
+          </div>
+          <div className="row" style={{ alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn btn--small"
+              onClick={() => void verify()}
+              disabled={check.state === 'checking'}
+            >
+              {check.state === 'checking' ? '🔄 Recomputing on GenLayer…' : 'Recompute on network'}
             </button>
-            {check.state === 'match' && <Chip tone="held">Matches the contract</Chip>}
-            {check.state === 'mismatch' && <Chip tone="moved">Does not match</Chip>}
+            {check.state === 'match' && <Chip tone="held">✓ Matches contract state perfectly</Chip>}
+            {check.state === 'mismatch' && <Chip tone="moved">⚠ State mismatch detected</Chip>}
             {check.state === 'error' && <span className="field__error">{check.message}</span>}
           </div>
         </section>

@@ -184,7 +184,7 @@ export function HowPage() {
         <li>This runs on Studionet, a test network. Records demonstrate the mechanism and carry no legal weight.</li>
       </ul>
 
-      <p>
+      <p style={{ marginTop: '2rem' }}>
         <Link className="btn btn--primary" to="/new">
           Register a pledge
         </Link>

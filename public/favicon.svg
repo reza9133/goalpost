@@ -1,6 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#10202b"/>
-  <path d="M9 7v19" stroke="#e8edef" stroke-width="3.2" stroke-linecap="round"/>
-  <path d="M9 14h14" stroke="#e8edef" stroke-width="3.2" stroke-linecap="round"/>
-  <path d="M23 14v12" stroke="#f0764f" stroke-width="3.2" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1b24"/>
+      <stop offset="100%" stop-color="#1a3040"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f5784e"/>
+      <stop offset="100%" stop-color="#dc4a20"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#bg)"/>
+  <path d="M9 7v19" stroke="#e8f0f4" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M9 14h14" stroke="#e8f0f4" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M23 14v12" stroke="url(#bar)" stroke-width="3.2" stroke-linecap="round"/>
 </svg>

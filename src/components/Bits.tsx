@@ -37,7 +37,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
 
   return (
     <button type="button" className="btn btn--quiet btn--small" onClick={() => void copy()} aria-live="polite">
-      {copied ? 'Copied' : label}
+      {copied ? '✓ Copied' : label}
     </button>
   );
 }
@@ -70,9 +70,11 @@ export function Notice({
 
 export function Loading({ label = 'Loading from the network' }: { label?: string }) {
   return (
-    <p className="loading" role="status">
+    <div className="loading" role="status">
       <span className="loading__dot" aria-hidden="true" />
-      {label}
-    </p>
+      <span className="loading__dot" aria-hidden="true" style={{ animationDelay: '0.15s' }} />
+      <span className="loading__dot" aria-hidden="true" style={{ animationDelay: '0.3s' }} />
+      <span>{label}</span>
+    </div>
   );
 }
