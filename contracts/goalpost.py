@@ -17,8 +17,11 @@ Lifecycle
                     pledge should be held to. Validators fetch the page themselves and
                     confirm every quote is really there. The quotes are then frozen.
 2. submit_report    Someone submits a report URL. It must live under the reporting prefix
-                    that was frozen with the pledge (same host), otherwise it is rejected
-                    without any network access.
+                    that was frozen with the pledge, otherwise it is rejected without any
+                    network access. That prefix was only accepted at registration because
+                    (a) it lies inside the pledge's own publisher scope (same host and, on
+                    hosts that serve many publishers, the same publisher namespace) and
+                    (b) the pledge page itself, which validators fetched, declares it.
 3. evaluate_report  Validators fetch the report and classify each frozen element as
                     KEPT, MOVED_DISCLOSED, MOVED_SILENT or NOT_ADDRESSED, citing verbatim
                     excerpts. The contract verifies every excerpt against the source and
@@ -44,9 +47,14 @@ Design rules enforced here, not in the client
   never to a clean bill of health.
 * Non-deterministic blocks return values, never raise for expected conditions such as an
   unreachable page, so validators reach consensus on the outcome instead of on an error.
+* Reports are bound to their publisher. A hostname is not a publisher: on a shared host any
+  tenant can publish under the same name. A reporting prefix is therefore accepted only if it
+  is inside the pledge's publisher scope AND the pledge page itself names it, so a third party
+  who registers a pledge about someone else's page cannot aim it at pages they control.
 * Equivalence rule: validators re-run the whole fetch and judgement independently and must
-  agree on the verdict and on the exact set of silently moved elements. They must also be
-  able to find every excerpt the leader cited in their own copy of the source.
+  agree on the verdict, on the exact set of silently moved elements and on the status of
+  EVERY frozen element. They must also be able to find every excerpt the leader cited in their
+  own copy of the source.
 * Every digest hashes a canonical structured encoding, never a delimiter-joined string.
 
 This contract is a record-keeper and adjudicator. It holds no value and moves no value.
@@ -63,7 +71,7 @@ import typing
 # Domain constants
 # --------------------------------------------------------------------------------------
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 RUNNER = 'py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6'
 
 KINDS = ('research', 'climate', 'product', 'governance', 'funding', 'policy', 'other')
@@ -151,6 +159,42 @@ _CHANGE_MARKERS = (
     'adopt', 'introduc', 'reclassif', 'reformul', 'reset',
 )
 
+# --- Publisher authority -------------------------------------------------------------------
+# A hostname is not a publisher. On some hosts one name serves many unrelated tenants, and on a
+# few of those the tenant is the first path segment(s), not the host. For such hosts the
+# publisher scope is host + that many leading segments. Hosts that give a publisher no
+# namespace at all (paste sites, file lockers) cannot carry an authority claim and are refused.
+# Any host not listed is treated as having a single publisher; that is a stated residual risk.
+_PATH_TENANT_HOSTS = {
+    'gist.githubusercontent.com': 1,
+    'raw.githubusercontent.com': 1,
+    'github.com': 1,
+    'gist.github.com': 1,
+    'gitlab.com': 1,
+    'bitbucket.org': 1,
+    'codeberg.org': 1,
+    'huggingface.co': 1,
+    'medium.com': 1,
+    'sites.google.com': 2,
+}
+_FLAT_SHARED_HOSTS = (
+    'pastebin.com',
+    'paste.ee',
+    'dpaste.com',
+    'hastebin.com',
+    'justpaste.it',
+    'rentry.co',
+    'controlc.com',
+    'docs.google.com',
+    'drive.google.com',
+    'dropbox.com',
+)
+# The pledge page must name its reporting prefix, either as a visible https URL or in
+# <link rel="goalpost-reports" href="..."> / <meta name="goalpost-reports" content="...">.
+DECLARATION_NAME = 'goalpost-reports'
+AUTHORITY_KEY = '@reporting_authority'
+MAX_DECLARED_URLS = 60
+
 _KEY_RE = re.compile(r'^[a-z][a-z0-9_]{1,31}$')
 _HOST_RE = re.compile(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$')
 _ISO_RE = re.compile(
@@ -184,6 +228,9 @@ _BLOCK_RE = re.compile(
     re.I,
 )
 _TAG_RE = re.compile(r'<[a-zA-Z/!][^>]*>')
+_MARKUP_TAG_RE = re.compile(r'<(?:link|meta)\b[^>]*>', re.I)
+_ATTR_RE = re.compile(r'([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))')
+_TEXT_URL_RE = re.compile(r'https://[^\s<>"\'`]+')
 _ENTITY_RE = re.compile(r'&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);')
 _NAMED_ENTITIES = {
     'amp': '&',
@@ -348,6 +395,120 @@ def _validate_static_url(url: typing.Any, label: str) -> str:
     if '?' in cleaned:
         _fail(label + ' must not contain a query string')
     return cleaned
+
+
+def _path_segments(url: str) -> list:
+    rest = url[len('https://'):]
+    authority = rest.split('/')[0]
+    path = rest[len(authority):].split('?')[0].split('#')[0]
+    return [segment for segment in path.split('/') if segment != '']
+
+
+def _tenant_key(host: str) -> str:
+    return host[4:] if host.startswith('www.') else host
+
+
+def _publisher_scope(url: str, label: str) -> str:
+    """
+    Who is allowed to speak under this URL. Plain hosts have one publisher, so the scope is the
+    host. On hosts that serve many unrelated publishers the scope also names the publisher's
+    namespace (for example github.com/<owner>), so two tenants of one host never share a scope.
+    Hosts that give a publisher no namespace cannot carry an authority claim at all.
+    """
+    host = _tenant_key(_host_of(url))
+    if host in _FLAT_SHARED_HOSTS:
+        _fail(label + ' is on ' + host + ', which gives no publisher a namespace of its own, so reports cannot be bound to a publisher there')
+    depth = _PATH_TENANT_HOSTS.get(host, 0)
+    if depth == 0:
+        return host
+    segments = _path_segments(url)
+    if len(segments) < depth:
+        _fail(label + ' must include the publisher namespace on ' + host + ' (for example https://' + host + '/<publisher>/)')
+    return host + '/' + '/'.join(segment.casefold() for segment in segments[:depth])
+
+
+def _declared_form(url: str) -> str:
+    """
+    Canonical form of a URL a pledge page declares: https only, no credentials or port, host in
+    lower case, no query or fragment, dot segments resolved, and always ending with a slash so it
+    can be compared with a reporting prefix as a directory. Empty if the URL cannot qualify.
+    """
+    if not url.startswith('https://'):
+        return ''
+    rest = url[len('https://'):].split('#')[0].split('?')[0]
+    authority = rest.split('/')[0].lower()
+    if authority == '' or '@' in authority or ':' in authority or _HOST_RE.match(authority) is None:
+        return ''
+    kept: list = []
+    for segment in rest[len(authority):].split('/'):
+        if segment in ('', '.'):
+            continue
+        if segment == '..':
+            if len(kept) > 0:
+                kept.pop()
+            continue
+        kept.append(segment)
+    return 'https://' + authority + '/' + ''.join(segment + '/' for segment in kept)
+
+
+def _resolve_link(base_url: str, href: str) -> str:
+    """Resolve a link found on the pledge page against the page's own URL (RFC 3986, simplified)."""
+    href = href.strip()
+    if href == '' or href.startswith('#') or href.startswith('?'):
+        return ''
+    if href.startswith('https://'):
+        return _declared_form(href)
+    if href.startswith('//'):
+        return _declared_form('https:' + href)
+    head = href.split('/')[0].split('?')[0]
+    if ':' in head:
+        return ''
+    rest = base_url[len('https://'):]
+    authority = rest.split('/')[0]
+    base_path = rest[len(authority):].split('?')[0]
+    link_path = href.split('#')[0].split('?')[0]
+    if link_path.startswith('/'):
+        path = link_path
+    else:
+        path = base_path[:base_path.rfind('/') + 1] + link_path
+        if not path.startswith('/'):
+            path = '/' + path
+    return _declared_form('https://' + authority + path)
+
+
+def _declared_urls(raw: str, text: str, base_url: str) -> list:
+    """
+    The reporting addresses a pledge page declares about itself. Two channels count and nothing
+    else: the dedicated link/meta element, and an https URL written out in the visible text.
+    Ordinary navigation links do not, because a home link must not authorise a whole host.
+    """
+    cleaned = _SKIP_RE.sub(' ', _COMMENT_RE.sub(' ', raw))
+    found: list = []
+    for tag in _MARKUP_TAG_RE.findall(cleaned):
+        attrs: dict = {}
+        for match in _ATTR_RE.finditer(tag):
+            value = match.group(2) or match.group(3) or match.group(4) or ''
+            attrs[match.group(1).lower()] = _ENTITY_RE.sub(_decode_entity, value)
+        named = attrs.get('name', '').strip().lower() == DECLARATION_NAME
+        related = DECLARATION_NAME in attrs.get('rel', '').lower().split()
+        if not named and not related:
+            continue
+        target = attrs.get('href', '') if related else attrs.get('content', '')
+        resolved = _resolve_link(base_url, target)
+        if resolved != '' and resolved not in found:
+            found.append(resolved)
+    for token in _TEXT_URL_RE.findall(text):
+        resolved = _declared_form(token.rstrip('.,;:!?)]}\'"'))
+        if resolved != '' and resolved not in found:
+            found.append(resolved)
+        if len(found) >= MAX_DECLARED_URLS:
+            break
+    return found[:MAX_DECLARED_URLS]
+
+
+def _authority_declared(prefix: str, declared: list) -> bool:
+    """The prefix is authorised if it is a declared directory or lies inside one."""
+    return any(prefix.startswith(form) for form in declared)
 
 
 _UNRESERVED_ESCAPE_RE = re.compile(r'%(?:2[dDeE]|3[0-9]|4[1-9a-fA-F]|5[0-9aAfF]|6[1-9a-fA-F]|7[0-9aAeE])')
@@ -698,6 +859,27 @@ def _scan_equivalent(theirs: typing.Any, mine: typing.Any) -> bool:
     return theirs.get('present') == mine.get('present')
 
 
+def _classification_of(outcome: dict) -> typing.Optional[list]:
+    """
+    The decision-critical part of an audit outcome: (key, status) for every frozen element, in
+    order. None if the outcome is not shaped like one. Excerpts and reasons are evidence and
+    prose; the status is what the verdict, the silent set and every later reader depend on.
+    """
+    items = outcome.get('elements')
+    if not isinstance(items, list):
+        return None
+    pairs: list = []
+    for item in items:
+        if not isinstance(item, dict):
+            return None
+        key = item.get('key')
+        status = item.get('status')
+        if not isinstance(key, str) or status not in _ALL_STATUSES:
+            return None
+        pairs.append((key, status))
+    return pairs
+
+
 def _audit_equivalent(
     theirs: typing.Any,
     mine: typing.Any,
@@ -706,9 +888,12 @@ def _audit_equivalent(
     own_truncated: bool = False,
 ) -> bool:
     """
-    Equivalence rule for audits. Validators must reach the same verdict and the same set of
-    silently moved elements, and every excerpt the leader cited must exist in the validator's
-    own copy of the report. Free-text reasons are allowed to differ.
+    Equivalence rule for audits. Validators must agree on the verdict, on the set of silently
+    moved elements and on the status of EVERY frozen element, key by key. Two outcomes that
+    share a verdict but classify the elements differently (A kept and B disclosed against A
+    disclosed and B kept) are different findings and are not equivalent. Every excerpt the
+    leader cited must exist in the validator's own copy of the report. Free-text reasons and
+    the choice of excerpt are allowed to differ.
 
     When the frozen elements are supplied, every per-element claim the leader made is also
     re-judged under the contract's own rules against the validator's copy of the report, so a
@@ -722,23 +907,25 @@ def _audit_equivalent(
         return False
     if sorted(theirs.get('silent_keys', [])) != sorted(mine.get('silent_keys', [])):
         return False
+
+    their_classes = _classification_of(theirs)
+    my_classes = _classification_of(mine)
+    if their_classes is None or my_classes is None or their_classes != my_classes:
+        return False
+    if elements is not None and [key for key, _ in their_classes] != [element['key'] for element in elements]:
+        return False
+    if _aggregate([status for _, status in their_classes]) != theirs.get('verdict'):
+        return False
+
     own_norm = _norm(own_report_text)
     items = theirs.get('elements', [])
-    if not isinstance(items, list):
-        return False
     for item in items:
-        if not isinstance(item, dict):
-            return False
         for field in ('report_excerpt', 'disclosure_excerpt'):
             excerpt = str(item.get(field, ''))
             if excerpt != '' and _norm(excerpt) not in own_norm:
                 return False
     if elements is not None:
-        if len(items) != len(elements):
-            return False
         for element, item in zip(elements, items):
-            if item.get('key') != element['key']:
-                return False
             if _judge_element(element, item, own_norm, own_truncated)['status'] != item.get('status'):
                 return False
     return True
@@ -782,7 +969,7 @@ def _validate_outcome(elements: list, outcome: typing.Any) -> dict:
     return {'verdict': verdict, 'silent_keys': silent, 'elements': clean}
 
 
-def _validate_scan(elements: list, scan: typing.Any) -> dict:
+def _validate_scan(elements: list, scan: typing.Any, with_authority: bool = False) -> dict:
     """Return {ok, reason, present} for an agreed page scan, refusing a malformed shape."""
     if not isinstance(scan, dict):
         _fail('agreed page scan is malformed')
@@ -790,7 +977,8 @@ def _validate_scan(elements: list, scan: typing.Any) -> dict:
         reason = scan.get('reason')
         return {'ok': False, 'reason': reason if isinstance(reason, str) else REASON_UNREACHABLE, 'present': {}}
     present = scan.get('present')
-    if not isinstance(present, dict) or sorted(present.keys()) != sorted(element['key'] for element in elements):
+    expected = [element['key'] for element in elements] + ([AUTHORITY_KEY] if with_authority else [])
+    if not isinstance(present, dict) or sorted(present.keys()) != sorted(expected):
         _fail('agreed page scan does not match the frozen elements')
     for value in present.values():
         if not isinstance(value, bool):
@@ -840,11 +1028,12 @@ def _status_of(response: typing.Any) -> typing.Optional[int]:
     return None
 
 
-def _fetch_text(url: str) -> dict:
+def _fetch_text(url: str, collect_declared: bool = False) -> dict:
     """
     Fetch a document and reduce it to text. Returns {'ok': True, 'text': ...} or
     {'ok': False, 'reason': CLASS}. Expected failures are values, not exceptions, so that
-    validators can agree on them.
+    validators can agree on them. With `collect_declared` the result also carries the reporting
+    addresses the page declares about itself.
     """
     try:
         response = gl.nondet.web.get(url)
@@ -871,18 +1060,27 @@ def _fetch_text(url: str) -> dict:
     text = _html_to_text(body)
     if text == '':
         return {'ok': False, 'reason': REASON_EMPTY}
-    return {'ok': True, 'text': text}
+    result: dict = {'ok': True, 'text': text}
+    if collect_declared:
+        result['declared'] = _declared_urls(body, _clip(text, MAX_SCAN_CHARS), url)
+    return result
 
 
-def _scan_page(url: str, elements: list) -> dict:
-    """Fetch a pledge page and report which frozen quotes are present on it."""
-    fetched = _fetch_text(url)
+def _scan_page(url: str, elements: list, report_prefix: str = '') -> dict:
+    """
+    Fetch a pledge page and report which frozen quotes are present on it. With a reporting
+    prefix it also reports whether the page itself declares that prefix, under AUTHORITY_KEY.
+    """
+    fetched = _fetch_text(url, report_prefix != '')
     if not fetched['ok']:
         return {'ok': False, 'reason': fetched['reason']}
     # Normalise first, then clip: the budget is spent on normalised characters, so runs of
     # whitespace that differ between two fetches of the same page cannot move the cut-off.
     haystack = _clip(_norm(fetched['text']), MAX_SCAN_CHARS)
-    return {'ok': True, 'present': {element['key']: _norm(element['quote']) in haystack for element in elements}}
+    present = {element['key']: _norm(element['quote']) in haystack for element in elements}
+    if report_prefix != '':
+        present[AUTHORITY_KEY] = _authority_declared(report_prefix, fetched.get('declared', []))
+    return {'ok': True, 'present': present}
 
 
 def _build_audit_prompt(elements: list, report_text: str) -> str:
@@ -944,18 +1142,18 @@ def _audit_once(url: str, elements: list) -> typing.Tuple[dict, str, bool]:
     return _reconcile(elements, _coerce_json(raw), report_text, truncated), report_text, truncated
 
 
-def _run_scan(url: str, elements: list) -> dict:
+def _run_scan(url: str, elements: list, report_prefix: str = '') -> dict:
     """Page scan under consensus. Validators repeat the fetch and must see the same presence map."""
 
     def leader_fn() -> str:
-        return _canonical(_scan_page(url, elements))
+        return _canonical(_scan_page(url, elements, report_prefix))
 
     def validator_fn(leaders_res: typing.Any) -> bool:
         if not isinstance(leaders_res, gl.vm.Return):
             return False
         try:
             theirs = json.loads(leaders_res.calldata)
-            mine = _scan_page(url, elements)
+            mine = _scan_page(url, elements, report_prefix)
         except Exception:
             return False
         return _scan_equivalent(theirs, mine)
@@ -1083,6 +1281,11 @@ class Goalpost(gl.Contract):
             _fail('report_prefix must end with a slash')
         if _host_of(report_prefix) != _host_of(pledge_url):
             _fail('reports must be published on the same host as the pledge')
+        # A hostname is not a publisher. The prefix must also sit in the pledge's own publisher
+        # scope, so on a shared host a registrant cannot point a pledge at another tenant's pages.
+        scope = _publisher_scope(pledge_url, 'pledge_url')
+        if _publisher_scope(report_prefix, 'report_prefix') != scope:
+            _fail('report_prefix is outside the publisher scope of the pledge (' + scope + ')')
         elements = _parse_elements(elements_json)
 
         commitment = _commitment_of(pledge_url, report_prefix, elements)
@@ -1091,12 +1294,17 @@ class Goalpost(gl.Contract):
         if existing != '':
             _fail('this pledge is already registered as ' + existing)
 
-        scan = _validate_scan(elements, _run_scan(pledge_url, elements))
+        scan = _validate_scan(elements, _run_scan(pledge_url, elements, report_prefix), True)
         if not scan['ok']:
             _fail('the pledge page could not be retrieved (' + scan['reason'] + ')')
         for element in elements:
             if not scan['present'][element['key']]:
                 _fail('the quote for element "' + element['key'] + '" was not found verbatim on the pledge page')
+        if not scan['present'][AUTHORITY_KEY]:
+            _fail(
+                'the pledge page does not declare the reporting prefix: add <link rel="' + DECLARATION_NAME
+                + '" href="' + report_prefix + '"> or write the address on the page'
+            )
 
         now = _now()
         self.pledge_seq = int(self.pledge_seq) + 1
@@ -1110,6 +1318,7 @@ class Goalpost(gl.Contract):
             'owner': owner,
             'pledge_url': pledge_url,
             'report_prefix': report_prefix,
+            'authority': {'scope': scope, 'method': 'PLEDGE_PAGE_DECLARATION'},
             'elements': elements,
             'commitment': commitment,
             'status': PLEDGE_ACTIVE,
@@ -1137,15 +1346,18 @@ class Goalpost(gl.Contract):
     def check_pledge_integrity(self, pledge_id: str) -> str:
         """
         Ask validators to re-fetch the pledge page and confirm every frozen quote is still
-        published. A page that no longer contains a frozen quote has been edited after the
-        fact, and that is recorded permanently. An unreachable page proves nothing and is
+        published and that the page still declares the reporting prefix. A page that lost a
+        frozen quote, or withdrew the declaration, has been edited after the fact, and that is
+        recorded permanently (the withdrawn declaration appears as "@reporting_authority"). An unreachable page proves nothing and is
         logged without changing the integrity state.
         """
         record = self._load_pledge(pledge_id)
         if record['status'] != PLEDGE_ACTIVE:
             _fail('pledge is retired')
 
-        scan = _validate_scan(record['elements'], _run_scan(record['pledge_url'], record['elements']))
+        scan = _validate_scan(
+            record['elements'], _run_scan(record['pledge_url'], record['elements'], record['report_prefix']), True
+        )
         now = _now()
         if not scan['ok']:
             result = INTEGRITY_UNREACHABLE
@@ -1323,6 +1535,12 @@ class Goalpost(gl.Contract):
                 'runner': RUNNER,
                 'kinds': list(KINDS),
                 'dimensions': list(DIMENSIONS),
+                'authority': {
+                    'declaration_name': DECLARATION_NAME,
+                    'authority_key': AUTHORITY_KEY,
+                    'path_tenant_hosts': dict(_PATH_TENANT_HOSTS),
+                    'flat_shared_hosts': list(_FLAT_SHARED_HOSTS),
+                },
                 'limits': {
                     'max_elements': MAX_ELEMENTS,
                     'min_quote_chars': MIN_QUOTE_CHARS,

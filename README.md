@@ -33,15 +33,31 @@ Target network: **GenLayer Studionet** (chain ID 61999). The web console is a st
    frozen. The registrant never supplies the baseline text, and text hidden in scripts, styles or
    comments does not count.
 2. **Submit.** Anyone submits a report URL. It must live under the reporting prefix chosen at
-   registration, on the same host as the pledge. Anything else is refused on-chain without touching
-   the network.
+   registration. That prefix is only accepted if it lies in the pledge's own **publisher scope** (the same
+   host and, on hosts that serve many publishers such as GitHub or Gist, the same publisher namespace) **and**
+   the pledge page itself declares it. A hostname alone is not a publisher, so an unrelated tenant of a
+   shared host cannot supply reports against someone else's pledge. Anything else is refused on-chain
+   without touching the network.
 3. **Evaluate.** Anyone asks the validators to read the report. Each classifies every frozen element
    and quotes the report as evidence. The contract checks every quote against the page text itself.
 4. **Agree.** Validators repeat the whole fetch and judgement independently and must agree on the
-   verdict and on exactly which elements moved silently. No agreement, nothing is written.
+   verdict, on exactly which elements moved silently **and on the status of every frozen element**. No
+   agreement, nothing is written.
 
-Anyone can also ask validators to re-fetch the pledge page; if a frozen quote has vanished, the silent
-edit is recorded permanently.
+Anyone can also ask validators to re-fetch the pledge page; if a frozen quote, or the page's declaration of
+its reporting prefix, has vanished, the silent edit is recorded permanently.
+
+### Declaring the reporting prefix
+
+The pledge page names where its reports live, in either of two ways:
+
+```html
+<link rel="goalpost-reports" href="https://example.org/reports/">   <!-- relative hrefs work too -->
+```
+
+or by writing the address (`https://example.org/reports/`) in the page's visible text. A declared directory
+authorises itself and everything below it. Ordinary navigation links do not count. Pledges on a plain-text
+host (a gist, say) declare it in words.
 
 ### Verdicts
 
@@ -70,10 +86,11 @@ contracts/goalpost.py      The Intelligent Contract (single file, Studionet stab
 tests/                     Python test suite (standard library only) + Node logic tests
   gensim.py                In-process stand-in for the GenVM runtime used by the tests
   node/                    Client logic tests (diff, validation mirror, receipts, RPC proxy)
-scripts/                   deploy.mjs and e2e.mjs (genlayer-js, Node 20+)
+scripts/                   deploy.mjs, e2e.mjs and evidence.mjs (genlayer-js, Node 20+)
 src/                       Web console (Vite, React, TypeScript, plain CSS)
 public/evidence/           Fictional demonstration documents the validators can fetch
 functions/rpc.ts           OPTIONAL same-origin RPC proxy for Cloudflare Pages
+functions/evidence/        Adversarial demonstration endpoint (a report that changes on every request)
 docs/                      Architecture, threat model, decisions, Cloudflare guide
 ```
 
@@ -123,9 +140,11 @@ genlayer network set studionet
 genlayer deploy --contract contracts/goalpost.py
 ```
 
-**Live deployment.** The Studionet contract used for the reference run is
-`0xF9545b0b3A58F8e68F2D879E23A4Bc78A9B025B9`. Its full lifecycle run (register, submit, evaluate,
-verdict `KEPT`, standing `HELD`) is recorded in [`evidence/`](evidence/README.md).
+**Live deployment.** The Studionet contract used for the first reference run is
+`0xF9545b0b3A58F8e68F2D879E23A4Bc78A9B025B9` (contract 1.2.0). Its full lifecycle run (register, submit,
+evaluate, verdict `KEPT`, standing `HELD`) is recorded in [`evidence/`](evidence/README.md). Contract 1.3.0
+(publisher authority, per-element consensus) is a new deployment: deploy it, redeploy the site so the demonstration
+pledge pages carry their declaration, then run `npm run evidence` to record every outcome.
 
 ### 4. Run the web console locally
 
@@ -160,7 +179,19 @@ npm run e2e -- --site https://YOUR-SITE.pages.dev
 npm run e2e -- --site https://YOUR-SITE.pages.dev --scenario halden --report silent --integrity
 ```
 
-It checks the evidence is reachable, freezes a pledge, submits and evaluates a report, prints each
+To record **live evidence for every outcome** (silent move, disclosed change, inconclusive, adversarial validator
+disagreement, and the kept proof) as Markdown files in `evidence/`:
+
+```bash
+npm run evidence -- --site https://YOUR-SITE.pages.dev
+npm run evidence -- --site https://YOUR-SITE.pages.dev --only silent,adversarial --await-finality
+```
+
+Each file lists every transaction with its network decision (`ACCEPTED` or `FINALIZED`), the contract call's
+execution result, and the validators' votes when the network reports them. Nothing is written unless a
+transaction really ran. `--await-finality` keeps polling until `FINALIZED`.
+
+`npm run e2e` checks the evidence is reachable, freezes a pledge, submits and evaluates a report, prints each
 element's status and cited excerpts, and confirms the attestation recomputes on chain. A verdict that
 differs from the expectation is reported, not treated as an error: real validators and real models are
 not deterministic. Broken contract invariants are errors.
@@ -171,10 +202,10 @@ Read this before you rely on anything. It states what was actually exercised and
 
 | Part | What was done | What was **not** done |
 | --- | --- | --- |
-| Contract | 100+ tests run the real `goalpost.py` on a simulated runtime (`tests/gensim.py`) that enforces GenVM's rules: no `gl.nondet` outside a block, no storage inside a block, validator majority, rollback on error. Mutation testing: 21 deliberate rule removals were each caught by the suite. | Never executed on real GenVM. `genvm-lint` not run. The simulator is not GenVM; it verifies logic, not runtime behaviour. |
+| Contract | About 200 tests (Python and Node) run the real `goalpost.py` on a simulated runtime (`tests/gensim.py`) that enforces GenVM's rules: no `gl.nondet` outside a block, no storage inside a block, validator majority, rollback on error. Mutation testing: 21 deliberate rule removals were each caught by the suite, and so were the 8 removals of the 1.3.0 rules (publisher scope, declaration, per-element consensus). | Contract 1.3.0 has not executed on real GenVM (1.2.0 did, see `evidence/`). `genvm-lint` not run. The simulator is not GenVM; it verifies logic, not runtime behaviour. |
 | Evidence pages | Every frozen quote and every excerpt is checked against the page text by the contract's own extractor; every demo report yields its expected verdict under an ideal model. | Real LLMs were not asked. Real model output will vary. |
-| Web console | Type-checked (strict) with TypeScript against hand-written stubs for React, the router and genlayer-js. Bundled with esbuild and exercised in headless Chromium against a fake chain whose data was produced by the real contract: rendering (light, dark, mobile), forms, validation, transaction success, rejection, no-agreement, declined signature, read outage, empty and not-found states. | Not built with Vite, and not type-checked against the real `@types/react`, `react-router-dom` or `genlayer-js` types. The real `genlayer-js` 1.1.8 calls were never executed. The browser-wallet path (`provider`) in particular is unverified; the session-key path is the default. |
-| Scripts | Syntax-checked; their receipt parser is parity-tested against the client's. | `deploy.mjs` and `e2e.mjs` have not run against the network. |
+| Web console | The logic modules (`receipt`, `chain`, `validate`, `format`, `config`) are type-checked under `strict` with stubs for `genlayer-js`; the receipt, outcome (accepted versus finalized, explicit execution success) and validation logic is unit-tested under Node and parity-tested against the contract. Earlier versions were also bundled with esbuild and exercised in headless Chromium against a fake chain. | The 1.3.0 React changes (`TxPanel`, `tx.tsx`, register, pledge and how pages) were not type-checked or rendered: the npm registry was not reachable when they were written. Not built with Vite, not checked against the real `@types/react`, `react-router-dom` or `genlayer-js` types. The real `genlayer-js` 1.1.8 calls were never executed here. The browser-wallet path (`provider`) is unverified; the session-key path is the default. |
+| Scripts | Syntax-checked; their receipt parser is parity-tested against the client's; the evidence renderer and vote parser are unit-tested. | `evidence.mjs` has not run against the network, so no 1.3.0 live evidence exists yet beyond what `evidence/` lists. |
 | Cloudflare proxy | Unit-tested with a mocked upstream: method allow-list, origin check, batch and size caps. | Not deployed. |
 
 The first real deployment is the real test. If something fails, [docs/decisions.md](docs/decisions.md)

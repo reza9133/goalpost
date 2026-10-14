@@ -16,7 +16,8 @@
     "test": "python3 -m unittest discover -s tests -t tests -v",
     "lint:contract": "genvm-lint check contracts/goalpost.py",
     "deploy:contract": "node scripts/deploy.mjs",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "evidence": "node scripts/evidence.mjs"
   },
   "dependencies": {
     "genlayer-js": "1.1.8",

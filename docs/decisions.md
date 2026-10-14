@@ -23,8 +23,16 @@ change standing.
 **Standing is current, strikes are history.** A later clean report can restore standing but cannot erase the
 count of silent moves.
 
-**Reports live on the pledge's host.** It binds "the report" to the pledging entity without a registry of
-identities, and it is a deterministic check that needs no network.
+**Reports are bound to the pledge's publisher, not just its host.** A hostname is not a publisher on a shared host,
+so the reporting prefix must also stay in the pledge's publisher scope and be declared by the pledge page itself.
+The declaration reuses the mechanism that already proves the quotes (validators fetch the page), so no registry of
+identities is needed. Navigation links deliberately do not count as a declaration. The multi-tenant host table is
+small and explicit, and `contract_info` publishes it so clients and reviewers can check it.
+
+**Consensus compares every element classification.** The verdict and the silent set are aggregates; two validators can
+agree on both and still disagree about which commitment was kept, disclosed or not addressed. The recorded audit
+stores per-element statuses, so those are what validators must agree on. This lowers the agreement rate on borderline
+elements; the failure mode is "nothing written, evaluate again", which is the safe side.
 
 ## Technical decisions
 
@@ -68,8 +76,10 @@ check here first.
 | A raised `gl.vm.UserError` rejects the transaction and rolls state back | all writes | Core assumption of the design |
 | `TreeMap.get(key, default)` and item assignment work on `TreeMap[str, str]` | storage helpers | Core assumption |
 | `createClient({chain, endpoint, account, provider})`, `readContract`, `writeContract({value})`, `getTransaction` | `lib/chain.ts`, `scripts/lib.mjs` | Edit those two files |
-| `getTransaction` exposes a status name or code and `consensus_data.leader_receipt[0].execution_result` | `lib/receipt.ts` | Unknown shapes degrade to "not failed", and pages re-read state |
+| `getTransaction` exposes a status name or code and `consensus_data.leader_receipt[].execution_result` (or `txExecutionResultName`) | `lib/receipt.ts` | An unreadable execution result is `unknown` and is **not** shown as completed; adjust `executionOf` |
 | The deploy receipt carries the contract address at one of several known paths | `scripts/deploy.mjs` | Copy it from the explorer |
+| `getTransaction` exposes `consensus_data.votes` (map) or `consensus_data.validators[].vote` | `scripts/evidence-lib.mjs` | Votes print as "not reported"; nothing is guessed |
+| A Pages Function can read static assets through `env.ASSETS` | `functions/evidence/flapping/reports/[name].ts` | The adversarial scenario needs another way to serve changing pages |
 
 ## Sources
 

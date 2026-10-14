@@ -43,6 +43,12 @@ IDEAL: Dict[str, Dict[str, Dict[str, Any]]] = {
                 item('assurance', 'KEPT', KEPT_ASSURANCE),
             ],
         },
+        'withheld': {
+            # The page has no readable report, so validators settle INCONCLUSIVE without any model call.
+            'verdict': 'INCONCLUSIVE',
+            'unreadable': True,
+            'items': [],
+        },
         'partial': {
             'verdict': 'INCOMPLETE',
             'items': [
@@ -93,4 +99,5 @@ def answer_for(scenario_id: str, report_id: str) -> Dict[str, Any]:
 
 
 def all_cases() -> List[tuple]:
-    return [(s, r, case) for s, reports in IDEAL.items() for r, case in reports.items()]
+    """Every demonstration report that a model reads. Unreadable reports never reach the model."""
+    return [(s, r, case) for s, reports in IDEAL.items() for r, case in reports.items() if not case.get('unreadable')]

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createAccount, createClient } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
 
-import { DECIDED, executionFailure, phaseOf, statusNameOf } from './receipt.mjs';
+import { executionOf, isDecision, phaseOf, settledAs, statusNameOf } from './receipt.mjs';
 
 export { parseArgs } from './args.mjs';
 
@@ -52,12 +52,28 @@ export function makeClient(key) {
   return { client: createClient({ chain: chainConfig(), endpoint: RPC_URL, account }), account };
 }
 
-/** Poll until the transaction is decided or failed. Returns { transaction, statusName, failure }. */
-export async function waitForDecision(client, hash, { timeoutMs = 10 * 60 * 1000, intervalMs = 3000, onStatus } = {}) {
+/**
+ * Poll until the validators have decided the transaction (ACCEPTED, FINALIZED or a failure state).
+ * Returns { transaction, statusName, execution, finality, failure }.
+ *
+ *   ok           = finality !== null && failure === null
+ *   finality     = 'accepted' (can still be appealed) | 'finalized' (cannot change) | null
+ *   execution    = 'success' | 'failed' | 'unknown', read from the transaction itself
+ *
+ * A decided transaction counts as completed only with an explicit successful execution result.
+ * With waitForFinality the call keeps polling an ACCEPTED transaction until it is FINALIZED or
+ * the finality timeout passes (the result then stays 'accepted').
+ */
+export async function waitForDecision(
+  client,
+  hash,
+  { timeoutMs = 10 * 60 * 1000, intervalMs = 3000, onStatus, waitForFinality = false, finalityTimeoutMs = 45 * 60 * 1000 } = {},
+) {
   const started = Date.now();
   let last = null;
   let lastStatus = 'PENDING';
   let reported = '';
+  let rereads = 0;
   for (;;) {
     if (Date.now() - started > timeoutMs) throw new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${hash}.`);
     try {
@@ -68,17 +84,56 @@ export async function waitForDecision(client, hash, { timeoutMs = 10 * 60 * 1000
         onStatus(lastStatus);
       }
       const phase = phaseOf(lastStatus);
-      if (phase === 'decided' || phase === 'failed') break;
+      if (isDecision(phase)) {
+        // The status can move before the execution result is attached. Read again instead of guessing.
+        if (phase !== 'failed' && executionOf(last).state === 'unknown' && rereads < 10) rereads += 1;
+        else break;
+      }
     } catch (error) {
       if (Date.now() - started > 45_000) throw error;
     }
     await sleep(intervalMs);
   }
-  const decided = DECIDED.has(lastStatus);
-  const failure = decided
-    ? executionFailure(last)
-    : `The validators did not reach agreement (${lastStatus.toLowerCase().replace(/_/g, ' ')}). Nothing was written.`;
-  return { transaction: last, statusName: lastStatus, failure };
+
+  const result = describeDecision(last, lastStatus);
+  if (waitForFinality && result.finality === 'accepted') {
+    const finalityStarted = Date.now();
+    while (Date.now() - finalityStarted < finalityTimeoutMs) {
+      await sleep(Math.max(intervalMs, 10_000));
+      try {
+        const again = await client.getTransaction({ hash });
+        const status = statusNameOf(again);
+        if (onStatus && status !== reported) {
+          reported = status;
+          onStatus(status);
+        }
+        if (phaseOf(status) === 'finalized' || phaseOf(status) === 'failed') return describeDecision(again, status);
+      } catch {
+        // a missed poll changes nothing
+      }
+    }
+  }
+  return result;
+}
+
+/** Pure: what a decided (or failed) transaction object means. Exported for tests. */
+export function describeDecision(transaction, statusName) {
+  const phase = phaseOf(statusName);
+  if (phase === 'failed' || !isDecision(phase)) {
+    return {
+      transaction,
+      statusName,
+      execution: 'unknown',
+      finality: null,
+      failure: `The validators did not reach agreement (${statusName.toLowerCase().replace(/_/g, ' ')}). Nothing was written.`,
+    };
+  }
+  const execution = executionOf(transaction);
+  const finality = settledAs(statusName, execution);
+  let failure = null;
+  if (execution.state === 'failed') failure = execution.message;
+  else if (execution.state === 'unknown') failure = 'The network decided this transaction, but its execution result could not be read, so it is not treated as completed.';
+  return { transaction, statusName, execution: execution.state, finality, failure };
 }
 
 /** Read a view method that returns JSON text. Retries transient errors. */
@@ -100,7 +155,7 @@ export async function readJson(client, address, functionName, args = []) {
   throw new Error(`Could not read ${functionName}: ${lastError instanceof Error ? lastError.message : lastError}`);
 }
 
-export async function send(client, address, functionName, args, label) {
+export async function send(client, address, functionName, args, label, options = {}) {
   console.log(`  -> ${label}`);
   const hash = String(
     await client.writeContract({
@@ -111,7 +166,8 @@ export async function send(client, address, functionName, args, label) {
     }),
   );
   console.log(`     submitted ${hash}`);
-  const outcome = await waitForDecision(client, hash, { onStatus: (name) => console.log(`     status: ${name}`) });
+  const outcome = await waitForDecision(client, hash, { onStatus: (name) => console.log(`     status: ${name}`), ...options });
   if (outcome.failure) throw new Error(`${label} failed: ${outcome.failure}`);
+  console.log(`     decision ${outcome.statusName}, execution ${outcome.execution}, ${outcome.finality === 'finalized' ? 'FINALIZED' : 'accepted, not final yet'}`);
   return { hash, ...outcome };
 }

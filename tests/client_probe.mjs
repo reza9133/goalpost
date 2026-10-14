@@ -21,6 +21,13 @@ process.stdout.write(
     flagLabels: Object.keys(F.FLAG_EXPLANATION),
     failureLabels: Object.keys(F.FAILURE_EXPLANATION),
     limits: V.DEFAULT_LIMITS,
+    scopes: (input.scopes ?? []).map((url) => {
+      const r = V.publisherScope(url, 'u');
+      return r.problem === null ? r.scope : null;
+    }),
+    tenantHosts: V.PATH_TENANT_HOSTS,
+    flatHosts: V.FLAT_SHARED_HOSTS,
+    declarationName: V.DECLARATION_NAME,
     normalized: input.texts.map((text) => V.normalize(text)),
   }),
 );

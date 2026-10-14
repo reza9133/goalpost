@@ -6,8 +6,11 @@
 // Flags
 //   --site <origin>      Public origin that serves /evidence. Validators fetch from here. Required.
 //   --scenario <id>      meridian (default) or halden
-//   --report <id>        faithful, silent, disclosed or partial (default silent)
+//   --report <id>        faithful, silent, disclosed, partial or withheld (default silent)
 //   --integrity          also ask validators to re-verify the pledge page
+//   --await-finality     keep polling the evaluation until it is FINALIZED, not only ACCEPTED
+//
+// To record evidence for every outcome (silent, disclosed, inconclusive, adversarial), use `npm run evidence`.
 //   --address <0x...>    contract address (default: artifacts/deployment.json, then VITE_CONTRACT_ADDRESS)
 //
 // What it proves: a pledge can be frozen from a live page, a report under the frozen prefix
@@ -116,7 +119,7 @@ async function main() {
   }
   if (!auditId) fail('The submitted report was not found as a pending audit.');
   console.log(`  audit ${auditId}`);
-  await send(client, ADDRESS, 'evaluate_report', [auditId], 'evaluate_report (validators read the report; this can take a few minutes)');
+  await send(client, ADDRESS, 'evaluate_report', [auditId], 'evaluate_report (validators read the report; this can take a few minutes)', { waitForFinality: flags.has('await-finality') });
 
   console.log('\n5. Result');
   const { audit, pledge } = await readJson(client, ADDRESS, 'get_audit_bundle', [auditId]);

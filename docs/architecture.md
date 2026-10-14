@@ -87,7 +87,7 @@ These run before any network access or model call, and fail with a readable mess
 - duplicate detection compares a folded key (`_report_key`), not the raw string: trailing or doubled slashes, `;param` suffixes, percent-escapes of unreserved characters and letter case do not make a second report. The stored URL is left as submitted. `index.html` versus the bare directory is not folded.
 - URLs must not contain dot segments (`.`, `..`) or percent-encoded dots and slashes (`%2e`, `%2f`, `%5c`) in the path, so the string prefix test on a report URL cannot be escaped
 - URLs: https only, no credentials, fragment, backslash, port or IP literal, public DNS host only
-- report prefix ends with `/` and shares the pledge's host
+- report prefix ends with `/`, shares the pledge's host **and lies inside the pledge's publisher scope** (see Publisher authority below)
 - a report URL must start with the frozen prefix and share its host (so `site.com.evil.com` cannot pass)
 - duplicate pledge, duplicate or already-audited report, audit limit per pledge (inconclusive attempts do not count toward it, but stored attempts are capped at twice the limit), retired pledge
 
@@ -97,12 +97,34 @@ There are exactly two, both in module-level helpers and both using `gl.vm.run_no
 
 | Block | Leader returns | Validators accept when |
 | --- | --- | --- |
-| `_run_scan` (register, integrity) | `{ok, present{key: bool}}` or `{ok:false, reason}` | they fetched the same page and see the same presence map, or the same failure class |
-| `_run_audit` (evaluate) | `{ok, verdict, silent_keys, elements[]}` or `{ok:false, reason}` | their own full re-run gives the same verdict and the same silent set, **and** every excerpt the leader cited exists in the validator's own copy of the report |
+| `_run_scan` (register, integrity) | `{ok, present{key: bool, "@reporting_authority": bool}}` or `{ok:false, reason}` | they fetched the same page and see the same presence map (frozen quotes **and** the declaration of the reporting prefix), or the same failure class |
+| `_run_audit` (evaluate) | `{ok, verdict, silent_keys, elements[]}` or `{ok:false, reason}` | their own full re-run gives the same verdict, the same silent set **and the same status for every frozen element, key by key**, and every excerpt the leader cited exists in the validator's own copy of the report |
 
 Expected failures (unreachable page, 404, 5xx, empty page) are returned as values with a coarse class, never
 raised, so validators can agree on them. Unexpected errors (for example the model failing) make the
 validator disagree, which rotates the leader. Free-text reasons may differ between validators.
+
+### Publisher authority (1.3.0)
+
+A hostname is not a publisher. Hostname equality let an unrelated tenant of a shared host (a gist, a GitHub
+account, a Medium page) supply reports against another party's pledge. A reporting prefix is now accepted at
+registration only if both of these hold:
+
+1. **Scope.** The prefix lies in the same *publisher scope* as the pledge URL. The scope is the host, plus the
+   publisher namespace on hosts that serve many publishers (`github.com/<owner>`, `gist.githubusercontent.com/<user>`,
+   `medium.com/@<user>`, `sites.google.com/view/<site>`; see `_PATH_TENANT_HOSTS`, which `contract_info` exposes).
+   Hosts that give a publisher no namespace at all (paste sites, file lockers; `_FLAT_SHARED_HOSTS`) cannot carry
+   a pledge. This check is deterministic and runs before any network access.
+2. **Declaration.** The pledge page itself, fetched by every validator, names the prefix: either
+   `<link rel="goalpost-reports" href="...">` / `<meta name="goalpost-reports" content="...">` (relative links are
+   resolved against the pledge URL) or the https address written out in the visible text. Ordinary navigation links
+   do not count, so a home link cannot authorise a whole host. A declared directory authorises itself and anything
+   below it, never a directory above it. Declarations inside comments, scripts, styles and `noscript` do not count.
+
+The declaration travels through the same equivalence rule as the frozen quotes (it is the `@reporting_authority`
+entry of the presence map), so validators must agree on it. `check_pledge_integrity` re-checks it: a page that
+withdraws its declaration is recorded as an edit, like a vanished quote. The pledge record stores
+`authority: {scope, method: "PLEDGE_PAGE_DECLARATION"}`.
 
 ### How a model answer becomes a verdict
 
@@ -126,7 +148,7 @@ it from stored state, so a third party can verify a copy without trusting it.
 | Module | Role |
 | --- | --- |
 | `lib/chain.ts` | The only file that imports `genlayer-js`: clients, cached/retried reads, sending and watching transactions, wallet helpers |
-| `lib/receipt.ts` | Pure transaction-object parsing (status, execution failure, ids). No SDK import, fully tested |
+| `lib/receipt.ts` | Pure transaction-object parsing (status, execution result, ids). No SDK import, fully tested |
 | `lib/validate.ts` | Client mirror of the contract's input rules |
 | `lib/diff.ts` | Word-level redline between pledged and reported text. Display only |
 | `lib/session.ts`, `lib/identity.tsx` | Session key or wallet identity |
@@ -136,6 +158,16 @@ it from stored state, so a third party can verify a copy without trusting it.
 
 Reads are cached for a few seconds, de-duplicated while in flight, and retried with backoff. A failed
 refresh keeps the last good data on screen.
+
+### Transaction completion in the console
+
+A transaction is reported as completed only with two separate facts: the validators decided it, and the contract
+call itself ran successfully (`executionOf` finds an explicit `SUCCESS` / `FINISHED_WITH_RETURN`; a missing or
+unreadable result is `unknown` and is never shown as completed). The decision has two levels that the console never
+merges: `ACCEPTED` (agreed, still open to appeal; shown as "ACCEPTED, not final") and `FINALIZED` (cannot change).
+After an accepted transaction the console keeps polling in the background until the network reports `FINALIZED`; if
+the transaction is reopened or overturned the panel says so. `scripts/lib.mjs` applies the same rules
+(`describeDecision`, `--await-finality`).
 
 ## Evidence rules added in 1.2.0
 
@@ -152,6 +184,12 @@ refresh keeps the last good data on screen.
 - **Leader claims are re-judged.** Validators no longer only compare the verdict and the silent set. They also run
   every per-element claim of the leader through `_judge_element` against their own copy of the report and require the
   same status, so a leader cannot slip in a `KEPT` without its anchors or a move claim with unrelated evidence.
+- **Every classification is compared (1.3.0).** `_audit_equivalent` also compares `(key, status)` for every frozen
+  element between the leader and the validator, in frozen order. Two outcomes with the same verdict and silent set but
+  a different status on any element (for example one element `NOT_ADDRESSED` against `MOVED_DISCLOSED`) are different
+  findings and are not equivalent. The verdict must also follow from the leader's own statuses. The cost: validators
+  must agree element by element, so a genuinely borderline element makes a round fail more often; nothing is written
+  in that case and the audit can be evaluated again.
 
 ## Other behaviour added in 1.2.0
 

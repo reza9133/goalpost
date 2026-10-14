@@ -31,6 +31,10 @@ const receipts = [
   { consensusData: { leaderReceipt: [{ executionResult: 'ERROR' }] } },
   { txExecutionResultName: 'FINISHED_WITH_ERROR' },
   { txExecutionResultName: 'FINISHED_WITH_RETURN' },
+  { txExecutionResultName: 'NOT_VOTED' },
+  { consensus_data: { leader_receipt: [{}] } },
+  { consensus_data: { leader_receipt: [{ execution_result: 'SUCCESS' }, { execution_result: 'ERROR', genvm_result: { stderr: 'z\nUserError: second receipt failed' } }] } },
+  { txExecutionResultName: 'FINISHED_WITH_RETURN', consensus_data: { leader_receipt: [{ execution_result: 'ERROR' }] } },
   { consensus_data: { leader_receipt: [{ execution_result: 'ERROR', genvm_result: { stderr: 'y'.repeat(2000) } }] } },
   { value: 12n, id: 'AUD-0042' },
   circular,
@@ -40,12 +44,17 @@ receipts.forEach((receipt, index) => {
   assert.equal(JS.statusNameOf(receipt), TS.statusNameOf(receipt), `statusNameOf #${index}`);
   assert.equal(JS.phaseOf(JS.statusNameOf(receipt)), TS.phaseOf(TS.statusNameOf(receipt)), `phaseOf #${index}`);
   assert.equal(JS.executionFailure(receipt), TS.executionFailure(receipt), `executionFailure #${index}`);
+  assert.deepEqual(JS.executionOf(receipt), TS.executionOf(receipt), `executionOf #${index}`);
+  for (const status of ['ACCEPTED', 'FINALIZED', 'PENDING', 'UNDETERMINED']) {
+    assert.equal(JS.settledAs(status, JS.executionOf(receipt)), TS.settledAs(status, TS.executionOf(receipt)), `settledAs ${status} #${index}`);
+  }
   for (const prefix of ['PLG', 'AUD']) {
     assert.equal(JS.findIdInReceipt(receipt, prefix), TS.findIdInReceipt(receipt, prefix), `findIdInReceipt ${prefix} #${index}`);
   }
 });
-for (const name of ['ACCEPTED', 'FINALIZED', 'PENDING', 'UNKNOWN', 'COMMITTING', 'UNDETERMINED', 'LEADER_TIMEOUT', 'WHATEVER']) {
+for (const name of ['ACCEPTED', 'FINALIZED', 'PENDING', 'UNKNOWN', 'COMMITTING', 'UNDETERMINED', 'LEADER_TIMEOUT', 'APPEAL_COMMITTING', 'WHATEVER']) {
   assert.equal(JS.phaseOf(name), TS.phaseOf(name), name);
+  assert.equal(JS.isDecision(JS.phaseOf(name)), TS.isDecision(TS.phaseOf(name)), `isDecision ${name}`);
 }
 assert.deepEqual([...JS.DECIDED].sort(), [...TS.DECIDED].sort());
 assert.deepEqual([...JS.FAILED].sort(), [...TS.FAILED].sort());

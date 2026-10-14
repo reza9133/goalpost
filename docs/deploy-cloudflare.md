@@ -103,6 +103,20 @@ add it to `ALLOWED_PREFIXES` deliberately. Browser wallets are always pointed at
 
 If something misbehaves with the proxy on, unset `VITE_RPC_URL`, rebuild, and you are back to direct reads.
 
+## 4b. The adversarial evidence function
+
+`functions/evidence/flapping/reports/[name].ts` serves a different demonstration report on every request, so
+validators read different documents at one address. `npm run evidence` uses it to record live validator
+disagreement. It needs no configuration (it reads the static `/evidence` pages through the Pages `ASSETS` binding),
+only serves the three fixed demonstration pages, and is sent with `Cache-Control: no-store`. Check it:
+
+```bash
+for i in 1 2 3 4 5 6; do curl -s -A "Mozilla/5.0" https://YOUR-SITE/evidence/flapping/reports/x.html | md5sum; done
+# expect more than one distinct hash (three different reports are served at random)
+```
+
+Delete the `functions/evidence` folder if you do not want it deployed.
+
 ## 5. Headers and CSP
 
 `public/_headers` ships `nosniff`, frame denial, a strict referrer policy, long caching for hashed assets, and

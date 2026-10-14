@@ -45,6 +45,33 @@ class ScenarioDefinitionTests(unittest.TestCase):
                 self.assertEqual([entry['key'] for entry in case['items']], keys)
 
 
+class LiveEvidenceScriptTests(unittest.TestCase):
+    """scripts/evidence.mjs must only name scenarios, reports and pages that exist in this repository."""
+
+    SOURCE = (ROOT / 'scripts' / 'evidence.mjs').read_text(encoding='utf-8')
+
+    def test_every_report_the_runner_uses_exists_with_the_expected_verdict(self):
+        import re
+
+        meridian = scenarios()['meridian']
+        by_id = {report['id']: report['expected'] for report in meridian['reports']}
+        used = re.findall(r"runReport\('(\w+)', '[^']*', '[^']*', '(\w+)', '(\w+)'\)", self.SOURCE)
+        self.assertEqual({report for _, report, _ in used}, {'faithful', 'silent', 'disclosed', 'withheld'})
+        for _, report, expected in used:
+            self.assertEqual(by_id[report], expected, report)
+
+    def test_the_adversarial_pages_exist(self):
+        self.assertTrue((ROOT / 'public/evidence/flapping/pledge.html').is_file())
+        self.assertTrue((ROOT / 'functions/evidence/flapping/reports/[name].ts').is_file())
+        self.assertIn("'/evidence/flapping/pledge.html'", self.SOURCE)
+        self.assertIn("'/evidence/flapping/reports/'", self.SOURCE)
+
+    def test_the_runner_never_writes_evidence_without_a_transaction(self):
+        # save() is only reachable after transact(); there must be no static evidence file generation
+        self.assertEqual(self.SOURCE.count('writeFileSync('), 1)
+        self.assertIn('transact(rows', self.SOURCE)
+
+
 class IdealAnswersHoldUpTests(unittest.TestCase):
     """Reconcile each ideal answer against its real page and check the verdict the contract derives."""
 

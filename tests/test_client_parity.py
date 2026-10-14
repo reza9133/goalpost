@@ -83,6 +83,25 @@ TEXTS = [
     'tab\tseparated\nlines',
 ]
 
+SCOPE_URLS = [
+    'https://acme.example/a/b.html',
+    'https://www.acme.example/x',
+    'https://gist.githubusercontent.com/Alice/abc/raw/pledge.txt',
+    'https://gist.githubusercontent.com/alice/',
+    'https://gist.githubusercontent.com/',
+    'https://github.com',
+    'https://github.com/acme/repo/blob/main/p.md',
+    'https://www.github.com/Acme/x',
+    'https://raw.githubusercontent.com/acme/pledges/main/p.md',
+    'https://medium.com/@acme/post',
+    'https://sites.google.com/view/acme/home',
+    'https://sites.google.com/view/',
+    'https://pastebin.com/raw/abc',
+    'https://docs.google.com/document/d/1',
+    'https://www.dropbox.com/s/x',
+    'https://gitlab.com/acme/',
+]
+
 TS_TIMEOUT = 60
 
 
@@ -93,7 +112,7 @@ def run_probe():
     try:
         result = subprocess.run(
             [node, str(ROOT / 'tests' / 'client_probe.mjs')],
-            input=json.dumps({'urls': URLS, 'texts': TEXTS}),
+            input=json.dumps({'urls': URLS, 'texts': TEXTS, 'scopes': SCOPE_URLS}),
             capture_output=True,
             text=True,
             timeout=TS_TIMEOUT,
@@ -122,6 +141,20 @@ class ClientParityTests(unittest.TestCase):
         for url, client_accepts in zip(URLS, PROBE['urls']):
             with self.subTest(url=url[:80]):
                 self.assertEqual(client_accepts, contract_accepts(url))
+
+    def test_publisher_scope_rules_agree_with_the_contract_on_every_input(self):
+        for address, client_scope in zip(SCOPE_URLS, PROBE['scopes']):
+            with self.subTest(url=address):
+                try:
+                    contract_scope = M._publisher_scope(address, 'u')
+                except Exception:
+                    contract_scope = None
+                self.assertEqual(client_scope, contract_scope)
+
+    def test_publisher_authority_tables_agree_with_the_contract(self):
+        self.assertEqual(PROBE['tenantHosts'], M._PATH_TENANT_HOSTS)
+        self.assertEqual(PROBE['flatHosts'], list(M._FLAT_SHARED_HOSTS))
+        self.assertEqual(PROBE['declarationName'], M.DECLARATION_NAME)
 
     def test_text_normalisation_agrees_with_the_contract(self):
         for text, client_value in zip(TEXTS, PROBE['normalized']):

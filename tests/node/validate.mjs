@@ -44,6 +44,14 @@ assert.ok(dup.errors.perElement[1].key);
 const dupQ = V.validateDraft({ ...base, elements: [base.elements[0], { ...base.elements[1], quote: base.elements[0].quote.toUpperCase() }] });
 assert.ok(dupQ.errors.perElement[1].quote);
 
+// publisher scope: a hostname is not a publisher
+const shared = (pledgeUrl, reportPrefix) => V.validateDraft({ ...base, pledgeUrl, reportPrefix }).errors.reportPrefix;
+assert.equal(shared('https://gist.githubusercontent.com/alice/p/raw/pledge.txt', 'https://gist.githubusercontent.com/alice/'), undefined);
+assert.match(shared('https://gist.githubusercontent.com/alice/p/raw/pledge.txt', 'https://gist.githubusercontent.com/bob/'), /publisher scope/);
+assert.match(shared('https://gist.githubusercontent.com/alice/p/raw/pledge.txt', 'https://gist.githubusercontent.com/'), /publisher namespace/);
+assert.equal(V.validateDraft({ ...base, pledgeUrl: 'https://pastebin.com/raw/abc', reportPrefix: 'https://pastebin.com/raw/' }).ok, false);
+assert.equal(V.publisherScope('https://GitHub.com/ACME/repo', 'u').scope, 'github.com/acme');
+
 // normalisation matches the contract's documented folding
 assert.equal(V.normalize('Cut  \u201cabsolute\u201d\n emissions \u2014 40%'), 'cut "absolute" emissions - 40%');
 assert.deepEqual(V.splitAnchors('absolute, 40%\n2030 ,  '), ['absolute', '40%', '2030']);

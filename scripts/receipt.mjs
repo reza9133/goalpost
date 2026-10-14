@@ -16,7 +16,9 @@ const STATUS_BY_CODE = {
   10: 'APPEAL_COMMITTING',
 };
 
-export const DECIDED = new Set(['ACCEPTED', 'FINALIZED']);
+export const ACCEPTED = 'ACCEPTED';
+export const FINALIZED = 'FINALIZED';
+export const DECIDED = new Set([ACCEPTED, FINALIZED]);
 export const FAILED = new Set(['UNDETERMINED', 'CANCELED', 'LEADER_TIMEOUT', 'VALIDATORS_TIMEOUT']);
 
 export function jsonText(value) {
@@ -39,18 +41,24 @@ export function statusNameOf(transaction) {
   return 'UNKNOWN';
 }
 
+// ACCEPTED means the validators agreed but the result can still be appealed. FINALIZED means it
+// cannot change. They are different phases, and neither says the contract call itself worked.
 export function phaseOf(statusName) {
-  if (DECIDED.has(statusName)) return 'decided';
+  if (statusName === FINALIZED) return 'finalized';
+  if (statusName === ACCEPTED) return 'accepted';
   if (FAILED.has(statusName)) return 'failed';
   if (statusName === 'PENDING' || statusName === 'UNINITIALIZED' || statusName === 'UNKNOWN') return 'queued';
   return 'consensus';
 }
 
-function firstLeaderReceipt(transaction) {
+export function isDecision(phase) {
+  return phase === 'accepted' || phase === 'finalized' || phase === 'failed';
+}
+
+function leaderReceipts(transaction) {
   const consensus = transaction?.consensus_data ?? transaction?.consensusData;
   const receipts = consensus?.leader_receipt ?? consensus?.leaderReceipt;
-  const first = Array.isArray(receipts) ? receipts[0] : undefined;
-  return first && typeof first === 'object' ? first : null;
+  return Array.isArray(receipts) ? receipts.filter((entry) => entry && typeof entry === 'object') : [];
 }
 
 function cleanErrorText(text) {
@@ -60,19 +68,46 @@ function cleanErrorText(text) {
   return picked.length > 300 ? `${picked.slice(0, 297)}...` : picked;
 }
 
-/** Null when execution succeeded; otherwise the best available reason the contract gave. */
-export function executionFailure(transaction) {
-  const leader = firstLeaderReceipt(transaction);
-  const result = String(leader?.execution_result ?? leader?.executionResult ?? transaction?.txExecutionResultName ?? '').toUpperCase();
-  const failed = result !== '' && result !== 'SUCCESS' && result !== 'FINISHED_WITH_RETURN';
-  if (!failed) return null;
-
+function failureText(leader) {
   const payload = leader?.result?.payload;
   const candidates = [leader?.genvm_result?.stderr, payload?.readable, typeof payload === 'string' ? payload : undefined];
   for (const candidate of candidates) {
     if (typeof candidate === 'string' && candidate.trim().length > 0) return cleanErrorText(candidate);
   }
   return 'The contract rejected this transaction. Open it in the explorer for the execution log.';
+}
+
+const EXECUTION_SUCCESS = new Set(['SUCCESS', 'FINISHED_WITH_RETURN']);
+
+// Success needs an explicit successful execution result. A missing or unreadable one is
+// 'unknown', never success: a transaction can be ACCEPTED while the contract call raised an error.
+export function executionOf(transaction) {
+  const receipts = leaderReceipts(transaction);
+  const results = [];
+  for (const receipt of receipts) {
+    const result = String(receipt.execution_result ?? receipt.executionResult ?? '').toUpperCase();
+    if (result !== '') results.push({ result, receipt });
+  }
+  const named = String(transaction?.txExecutionResultName ?? transaction?.tx_execution_result_name ?? '').toUpperCase();
+  if (named !== '' && named !== 'NOT_VOTED') results.push({ result: named });
+
+  if (results.length === 0) return { state: 'unknown' };
+  const bad = results.find((entry) => !EXECUTION_SUCCESS.has(entry.result));
+  if (bad === undefined) return { state: 'success' };
+  return { state: 'failed', message: failureText(bad.receipt ?? receipts[0]) };
+}
+
+/** Null unless the contract call itself failed. */
+export function executionFailure(transaction) {
+  const execution = executionOf(transaction);
+  return execution.state === 'failed' ? execution.message : null;
+}
+
+export function settledAs(statusName, execution) {
+  if (execution.state !== 'success') return null;
+  if (statusName === FINALIZED) return 'finalized';
+  if (statusName === ACCEPTED) return 'accepted';
+  return null;
 }
 
 export function findIdInReceipt(receipt, prefix) {
