@@ -78,6 +78,58 @@ export function urlProblem(value: string, label: string, limits: ContractLimits 
   return null;
 }
 
+// Mirror of the contract's publisher-authority tables (checked against contract_info by the parity tests).
+export const PATH_TENANT_HOSTS: Record<string, number> = {
+  'gist.githubusercontent.com': 1,
+  'raw.githubusercontent.com': 1,
+  'github.com': 1,
+  'gist.github.com': 1,
+  'gitlab.com': 1,
+  'bitbucket.org': 1,
+  'codeberg.org': 1,
+  'huggingface.co': 1,
+  'medium.com': 1,
+  'sites.google.com': 2,
+};
+export const FLAT_SHARED_HOSTS: string[] = [
+  'pastebin.com',
+  'paste.ee',
+  'dpaste.com',
+  'hastebin.com',
+  'justpaste.it',
+  'rentry.co',
+  'controlc.com',
+  'docs.google.com',
+  'drive.google.com',
+  'dropbox.com',
+];
+export const DECLARATION_NAME = 'goalpost-reports';
+
+/**
+ * Who may speak under a URL: the host, plus the publisher namespace on hosts that serve many
+ * unrelated publishers. Mirrors the contract's _publisher_scope. Returns a scope or a problem.
+ */
+export function publisherScope(value: string, label: string): { scope: string; problem: null } | { scope: null; problem: string } {
+  const rest = value.slice('https://'.length);
+  const rawAuthority = rest.split('/')[0].toLowerCase();
+  const host = rawAuthority.startsWith('www.') ? rawAuthority.slice(4) : rawAuthority;
+  if (FLAT_SHARED_HOSTS.includes(host)) {
+    return { scope: null, problem: `${label} is on ${host}, which gives no publisher a namespace of its own, so reports cannot be bound to a publisher there.` };
+  }
+  const depth = PATH_TENANT_HOSTS[host] ?? 0;
+  if (depth === 0) return { scope: host, problem: null };
+  const segments = rest
+    .slice(rest.split('/')[0].length)
+    .split('?')[0]
+    .split('#')[0]
+    .split('/')
+    .filter((segment) => segment !== '');
+  if (segments.length < depth) {
+    return { scope: null, problem: `${label} must include the publisher namespace on ${host} (for example https://${host}/<publisher>/).` };
+  }
+  return { scope: `${host}/${segments.slice(0, depth).map((segment) => segment.toLowerCase()).join('/')}`, problem: null };
+}
+
 export function hostOfUrl(value: string): string {
   return value.slice('https://'.length).split('/')[0].split('?')[0].toLowerCase();
 }
@@ -142,6 +194,20 @@ export function validateDraft(draft: Draft, limits: ContractLimits = DEFAULT_LIM
   } else if (!pledgeProblem && hostOfUrl(prefix) !== hostOfUrl(draft.pledgeUrl.trim())) {
     errors.reportPrefix = 'Reports must be published on the same host as the pledge.';
     fail();
+  } else if (!pledgeProblem) {
+    // A hostname is not a publisher: on a shared host the prefix must also be in the pledge's own namespace.
+    const pledgeScope = publisherScope(draft.pledgeUrl.trim(), 'The pledge page URL');
+    const prefixScope = publisherScope(prefix, 'The reporting prefix');
+    if (pledgeScope.problem !== null) {
+      errors.pledgeUrl = pledgeScope.problem;
+      fail();
+    } else if (prefixScope.problem !== null) {
+      errors.reportPrefix = prefixScope.problem;
+      fail();
+    } else if (prefixScope.scope !== pledgeScope.scope) {
+      errors.reportPrefix = `The reporting prefix is outside the publisher scope of the pledge (${pledgeScope.scope}).`;
+      fail();
+    }
   }
 
   if (draft.elements.length < 1) {

@@ -30,6 +30,15 @@ export const explorerAddress = (address: string): string => `${EXPLORER_URL}/add
 export const TX_POLL_INTERVAL_MS = 3000;
 export const TX_TIMEOUT_MS = 8 * 60 * 1000;
 
+/**
+ * After a transaction is ACCEPTED the console keeps watching it until it is FINALIZED. Accepted
+ * results can still be appealed, so the console never calls them final.
+ */
+export const FINALITY_POLL_INTERVAL_MS = 15_000;
+export const FINALITY_TIMEOUT_MS = 45 * 60 * 1000;
+/** A decided transaction whose execution result is not readable yet is re-read this many times before it is refused. */
+export const EXECUTION_REREADS = 10;
+
 /** Public links shown in the console. */
 export const GITHUB_URL = 'https://github.com/reza9133/goalpost';
 

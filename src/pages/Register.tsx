@@ -275,7 +275,14 @@ export function RegisterPage() {
                 aria-invalid={showErrors && Boolean(errors.reportPrefix)}
               />
               <p className="field__hint">
-                A prefix on the same host, ending with a slash. Only pages under it can ever be audited against this pledge.
+                A prefix on the same host, ending with a slash. Only pages under it can ever be audited against this pledge. On a host
+                that serves many publishers (GitHub, Gist, Medium and similar) it must also stay inside the pledge's own publisher
+                namespace.
+              </p>
+              <p className="field__hint">
+                The pledge page itself must name this prefix, or validators will refuse to freeze the pledge. Add{' '}
+                <code>{`<link rel="goalpost-reports" href="${draft.reportPrefix.trim() || 'https://example.org/reports/'}">`}</code> to the page,
+                or write the address in its visible text. A third party cannot aim a pledge at pages the publisher never named.
               </p>
               {showErrors && errors.reportPrefix && <p className="field__error">{errors.reportPrefix}</p>}
             </div>

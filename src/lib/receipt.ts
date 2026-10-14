@@ -2,7 +2,11 @@
 // can be tested in isolation. Studio's transaction shape varies a little between versions,
 // so every field is read defensively and unknown shapes degrade to a generic message.
 
-export type Phase = 'signing' | 'submitted' | 'queued' | 'consensus' | 'decided' | 'failed';
+// A transaction that the validators agreed on is ACCEPTED first. ACCEPTED means the consensus round
+// succeeded, but the result can still be appealed. Only FINALIZED means it can no longer change.
+// The two are different phases on purpose, and neither of them says the contract call worked:
+// that is a separate fact, read from the execution result (see executionOf).
+export type Phase = 'signing' | 'submitted' | 'queued' | 'consensus' | 'accepted' | 'finalized' | 'failed';
 
 export function jsonText(value: unknown): string {
   try {
@@ -31,7 +35,9 @@ const STATUS_BY_CODE: Record<number, string> = {
   10: 'APPEAL_COMMITTING',
 };
 
-export const DECIDED = new Set(['ACCEPTED', 'FINALIZED']);
+export const ACCEPTED = 'ACCEPTED';
+export const FINALIZED = 'FINALIZED';
+export const DECIDED = new Set([ACCEPTED, FINALIZED]);
 export const FAILED = new Set(['UNDETERMINED', 'CANCELED', 'LEADER_TIMEOUT', 'VALIDATORS_TIMEOUT']);
 
 export function statusNameOf(transaction: unknown): string {
@@ -47,18 +53,23 @@ export function statusNameOf(transaction: unknown): string {
 }
 
 export function phaseOf(statusName: string): Phase {
-  if (DECIDED.has(statusName)) return 'decided';
+  if (statusName === FINALIZED) return 'finalized';
+  if (statusName === ACCEPTED) return 'accepted';
   if (FAILED.has(statusName)) return 'failed';
   if (statusName === 'PENDING' || statusName === 'UNINITIALIZED' || statusName === 'UNKNOWN') return 'queued';
   return 'consensus';
 }
 
-function firstLeaderReceipt(transaction: unknown): Record<string, unknown> | null {
+/** True once polling for the validators' decision can stop: accepted, finalized or failed. */
+export function isDecision(phase: Phase): boolean {
+  return phase === 'accepted' || phase === 'finalized' || phase === 'failed';
+}
+
+function leaderReceipts(transaction: unknown): Record<string, unknown>[] {
   const tx = transaction as Record<string, unknown> | null;
   const consensus = (tx?.consensus_data ?? tx?.consensusData) as Record<string, unknown> | undefined;
   const receipts = (consensus?.leader_receipt ?? consensus?.leaderReceipt) as unknown[] | undefined;
-  const first = Array.isArray(receipts) ? receipts[0] : undefined;
-  return first && typeof first === 'object' ? (first as Record<string, unknown>) : null;
+  return Array.isArray(receipts) ? receipts.filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object') : [];
 }
 
 function cleanErrorText(text: string): string {
@@ -68,14 +79,7 @@ function cleanErrorText(text: string): string {
   return picked.length > 300 ? `${picked.slice(0, 297)}...` : picked;
 }
 
-/** Null when execution succeeded; otherwise the best available reason the contract gave. */
-export function executionFailure(transaction: unknown): string | null {
-  const tx = transaction as Record<string, unknown> | null;
-  const leader = firstLeaderReceipt(transaction);
-  const result = String(leader?.execution_result ?? leader?.executionResult ?? tx?.txExecutionResultName ?? '').toUpperCase();
-  const failed = result !== '' && result !== 'SUCCESS' && result !== 'FINISHED_WITH_RETURN';
-  if (!failed) return null;
-
+function failureText(leader: Record<string, unknown> | undefined): string {
   const genvm = leader?.genvm_result as Record<string, unknown> | undefined;
   const payload = (leader?.result as Record<string, unknown> | undefined)?.payload;
   const readable = (payload as Record<string, unknown> | undefined)?.readable;
@@ -84,6 +88,49 @@ export function executionFailure(transaction: unknown): string | null {
     if (typeof candidate === 'string' && candidate.trim().length > 0) return cleanErrorText(candidate);
   }
   return 'The contract rejected this transaction. Open it in the explorer for the execution log.';
+}
+
+const EXECUTION_SUCCESS = new Set(['SUCCESS', 'FINISHED_WITH_RETURN']);
+
+/**
+ * What running the contract call produced. `success` needs an explicit success result from the
+ * transaction. A missing or unreadable result is `unknown`, never success: a transaction can be
+ * ACCEPTED by consensus while the contract call itself raised an error and wrote nothing.
+ */
+export type Execution = { state: 'success' } | { state: 'failed'; message: string } | { state: 'unknown' };
+
+export function executionOf(transaction: unknown): Execution {
+  const tx = transaction as Record<string, unknown> | null;
+  const receipts = leaderReceipts(transaction);
+  const results: Array<{ result: string; receipt?: Record<string, unknown> }> = [];
+  for (const receipt of receipts) {
+    const result = String(receipt.execution_result ?? receipt.executionResult ?? '').toUpperCase();
+    if (result !== '') results.push({ result, receipt });
+  }
+  const named = String(tx?.txExecutionResultName ?? tx?.tx_execution_result_name ?? '').toUpperCase();
+  if (named !== '' && named !== 'NOT_VOTED') results.push({ result: named });
+
+  if (results.length === 0) return { state: 'unknown' };
+  const bad = results.find((entry) => !EXECUTION_SUCCESS.has(entry.result));
+  if (bad === undefined) return { state: 'success' };
+  return { state: 'failed', message: failureText(bad.receipt ?? receipts[0]) };
+}
+
+/** Null unless the contract call itself failed. An unreadable result is not reported as a failure here. */
+export function executionFailure(transaction: unknown): string | null {
+  const execution = executionOf(transaction);
+  return execution.state === 'failed' ? execution.message : null;
+}
+
+/**
+ * How far a transaction has really got. 'finalized' and 'accepted' both require an explicit
+ * successful execution; anything else is null, which callers must not present as completed.
+ */
+export function settledAs(statusName: string, execution: Execution): 'finalized' | 'accepted' | null {
+  if (execution.state !== 'success') return null;
+  if (statusName === FINALIZED) return 'finalized';
+  if (statusName === ACCEPTED) return 'accepted';
+  return null;
 }
 
 /** Find an id such as PLG-0003 or AUD-0012 that the transaction's return value carries. */

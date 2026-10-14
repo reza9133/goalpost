@@ -12,6 +12,7 @@ import {
   formatDate,
   formatDateTime,
   hostOf,
+  missingLabel,
   pathOf,
   plural,
   shortHex,
@@ -25,8 +26,8 @@ import { periodProblem, reportUrlProblem } from '../lib/validate';
 
 const INTEGRITY_TONE: Record<IntegrityResult, Tone> = { INTACT: 'held', EDITED: 'moved', UNREACHABLE: 'neutral' };
 const INTEGRITY_LABEL: Record<IntegrityResult, string> = {
-  INTACT: 'Every quote present',
-  EDITED: 'Quotes missing',
+  INTACT: 'Everything present',
+  EDITED: 'Frozen items missing',
   UNREACHABLE: 'Page unreachable',
 };
 
@@ -151,6 +152,14 @@ export function PledgePage() {
           <dd className="mono">{pledge.report_prefix}</dd>
         </div>
         <div>
+          <dt>Publisher authority</dt>
+          <dd>
+            {pledge.authority
+              ? `Declared by the pledge page itself, within publisher scope ${pledge.authority.scope}`
+              : 'Recorded before publisher authority was enforced (same host only)'}
+          </dd>
+        </div>
+        <div>
           <dt>Registered</dt>
           <dd>
             {formatDateTime(pledge.registered_at)} by <ExtLink href={explorerAddress(pledge.owner)}>{shortHex(pledge.owner, 8, 6)} ↗</ExtLink>
@@ -222,16 +231,18 @@ export function PledgePage() {
         </div>
 
         {integrity.state === 'EDITED' ? (
-          <Notice tone="warn" title="The live pledge page no longer carries every frozen quote">
+          <Notice tone="warn" title="The live pledge page no longer matches what was frozen">
             <p>
-              Validators found {plural(lastEdit?.missing.length ?? 0, 'frozen quote')} missing on {formatDateTime(lastEdit?.at ?? 0)}.
+              Validators found {plural(lastEdit?.missing.length ?? 0, 'frozen item')} missing on {formatDateTime(lastEdit?.at ?? 0)}
+              {lastEdit && lastEdit.missing.length > 0 && ` (${lastEdit.missing.map(missingLabel).join(', ')})`}. Frozen items are the quoted
+              sentences and the page's declaration of its reporting prefix.
               The frozen definition above is unaffected, and {plural(integrity.edits_detected, 'edit')} {integrity.edits_detected === 1 ? 'has' : 'have'}{' '}
               been permanently logged.
             </p>
           </Notice>
         ) : (
           <p className="muted">
-            ✓ Validators last confirmed all frozen quotes are intact on {formatDateTime(integrity.checked_at)}.
+            ✓ Validators last confirmed all frozen quotes and the reporting declaration are intact on {formatDateTime(integrity.checked_at)}.
             {integrity.edits_detected > 0 && ` ${plural(integrity.edits_detected, 'earlier edit')} remain on record.`}
           </p>
         )}
@@ -242,7 +253,7 @@ export function PledgePage() {
               <Chip tone={INTEGRITY_TONE[entry.result]}>{INTEGRITY_LABEL[entry.result]}</Chip>
               <span className="muted">
                 {formatDateTime(entry.at)}
-                {entry.missing.length > 0 && `, missing: ${entry.missing.join(', ')}`}
+                {entry.missing.length > 0 && `, missing: ${entry.missing.map(missingLabel).join(', ')}`}
               </span>
             </li>
           ))}

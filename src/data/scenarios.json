@@ -4,7 +4,7 @@
       "id": "meridian",
       "title": "Meridian Grid climate pledge",
       "kind": "climate",
-      "summary": "A regional utility pledges an absolute emissions cut. Three reports show a faithful restatement, a silent redefinition, a disclosed revision and an incomplete report.",
+      "summary": "A regional utility pledges an absolute emissions cut. Five reports show a faithful restatement, a silent redefinition, a disclosed revision, an incomplete report and a withheld one that cannot be read.",
       "pledge_path": "/evidence/meridian/pledge.html",
       "report_prefix_path": "/evidence/meridian/reports/",
       "elements": [
@@ -65,6 +65,13 @@
           "period": "FY2026",
           "path": "/evidence/meridian/reports/2026-partial.html",
           "expected": "INCOMPLETE"
+        },
+        {
+          "id": "withheld",
+          "label": "Withheld (unreadable)",
+          "period": "FY2026",
+          "path": "/evidence/meridian/reports/2026-withheld.html",
+          "expected": "INCONCLUSIVE"
         }
       ]
     },

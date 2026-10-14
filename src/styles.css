@@ -1835,6 +1835,31 @@ code {
   box-shadow: var(--shadow-lg), 0 0 16px rgba(26, 138, 94, 0.15);
 }
 
+.txpanel--accepted {
+  border-color: var(--revised);
+  box-shadow: var(--shadow-lg), 0 0 16px rgba(38, 104, 176, 0.15);
+}
+
+.txpanel__status {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.txpanel__status--accepted {
+  background: var(--revised-bg);
+  color: var(--revised-ink);
+}
+
+.txpanel__status--final {
+  background: var(--held-bg);
+  color: var(--held-ink);
+}
+
 .txpanel__head {
   display: flex;
   justify-content: space-between;
@@ -1869,7 +1894,7 @@ code {
   margin: 0.8rem 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 0.35rem;
 }
 

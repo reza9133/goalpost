@@ -171,3 +171,11 @@ export function formatGen(wei: bigint, digits = 3): string {
   const fraction = ((wei % unit) / scale).toString().padStart(digits, '0').replace(/0+$/, '');
   return fraction === '' ? whole.toString() : `${whole}.${fraction}`;
 }
+
+/** Key the contract uses when the pledge page stops declaring its reporting prefix. */
+export const AUTHORITY_KEY = '@reporting_authority';
+
+/** What a "missing" entry in an integrity check means, in words. */
+export function missingLabel(key: string): string {
+  return key === AUTHORITY_KEY ? 'the declaration of the reporting prefix' : key;
+}

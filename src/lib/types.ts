@@ -50,6 +50,8 @@ export interface PledgeRecord {
   owner: string;
   pledge_url: string;
   report_prefix: string;
+  /** Who the reporting prefix was bound to, and how. Absent on pledges recorded by an older contract version. */
+  authority?: { scope: string; method: string };
   elements: FrozenElement[];
   commitment: string;
   status: PledgeStatus;
@@ -163,6 +165,13 @@ export interface ContractInfo {
   runner: string;
   kinds: Kind[];
   dimensions: Dimension[];
+  /** Absent on contract versions before 1.3.0. */
+  authority?: {
+    declaration_name: string;
+    authority_key: string;
+    path_tenant_hosts: Record<string, number>;
+    flat_shared_hosts: string[];
+  };
   limits: ContractLimits;
 }
 

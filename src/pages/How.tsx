@@ -22,15 +22,16 @@ export function HowPage() {
           comments does not count.
         </li>
         <li>
-          <strong>Submit.</strong> Anyone submits a report address. It must sit under the reporting prefix chosen at registration, on the
-          same host as the pledge. Anything else is refused immediately, without touching the network.
+          <strong>Submit.</strong> Anyone submits a report address. It must sit under the reporting prefix chosen at registration. That prefix was
+          only accepted because it lies inside the pledge's own publisher scope (the same host and, on shared hosts, the same publisher
+          namespace) and because the pledge page itself names it. Anything else is refused immediately, without touching the network.
         </li>
         <li>
           <strong>Evaluate.</strong> Anyone asks the validators to read the report. Each validator independently classifies every frozen
           element and quotes the report as evidence. The contract checks every quote against the page text before believing it.
         </li>
         <li>
-          <strong>Agree.</strong> Validators must agree on the verdict and on exactly which elements moved silently. If they cannot, nothing
+          <strong>Agree.</strong> Validators must agree on the verdict, on exactly which elements moved silently and on the status of every single frozen element. If they cannot, nothing
           is written and the network tries again with another leader.
         </li>
       </ol>

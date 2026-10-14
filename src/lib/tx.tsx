@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { invalidateReads, sendTransaction, type Call, type TxOutcome } from './chain';
+import { invalidateReads, sendTransaction, watchFinality, type Call, type TxOutcome } from './chain';
 import { useIdentity } from './identity';
 import type { Phase } from './receipt';
 
@@ -28,10 +28,19 @@ export function TxProvider({ children }: { children: ReactNode }) {
   const { signer } = useIdentity();
   const [state, setState] = useState<TxState | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const finality = useRef<AbortController | null>(null);
 
-  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(
+    () => () => {
+      controller.current?.abort();
+      finality.current?.abort();
+    },
+    [],
+  );
 
-  const busy = state !== null && state.phase !== 'decided' && state.phase !== 'failed';
+  // Accepted and finalized are both resting states for the console: the result is readable. Only
+  // 'finalized' is final. While a transaction is merely accepted the finality watcher keeps running.
+  const busy = state !== null && state.phase !== 'accepted' && state.phase !== 'finalized' && state.phase !== 'failed';
 
   const run = useCallback(
     async (label: string, call: Call): Promise<TxOutcome | null> => {
@@ -41,6 +50,7 @@ export function TxProvider({ children }: { children: ReactNode }) {
         return null;
       }
       controller.current?.abort();
+      finality.current?.abort();
       const abort = new AbortController();
       controller.current = abort;
       setState({ label, phase: 'signing', startedAt });
@@ -63,11 +73,27 @@ export function TxProvider({ children }: { children: ReactNode }) {
           label,
           startedAt,
           finishedAt: Date.now(),
-          phase: outcome.ok ? 'decided' : 'failed',
+          phase: outcome.ok ? (outcome.finality ?? 'accepted') : 'failed',
           hash: outcome.hash,
           statusName: outcome.statusName,
           message: outcome.failure ?? undefined,
         });
+        if (outcome.ok && outcome.finality === 'accepted') {
+          const watcher = new AbortController();
+          finality.current = watcher;
+          void watchFinality(
+            outcome.hash,
+            (update) => {
+              invalidateReads();
+              setState((previous) =>
+                previous && previous.hash === outcome.hash
+                  ? { ...previous, phase: update.phase, statusName: update.statusName ?? previous.statusName, message: update.message }
+                  : previous,
+              );
+            },
+            watcher.signal,
+          );
+        }
         return outcome;
       } catch (cause) {
         setState((previous) => ({
@@ -86,6 +112,7 @@ export function TxProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback(() => {
     controller.current?.abort();
+    finality.current?.abort();
     setState(null);
   }, []);
 

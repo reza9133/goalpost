@@ -13,18 +13,23 @@ import {
   CHAIN_ID,
   CHAIN_NAME,
   CONTRACT_ADDRESS,
+  EXECUTION_REREADS,
   EXPLORER_URL,
   FAUCET_AMOUNT_WEI,
+  FINALITY_POLL_INTERVAL_MS,
+  FINALITY_TIMEOUT_MS,
   PUBLIC_RPC_URL,
   RPC_URL,
   TX_POLL_INTERVAL_MS,
   TX_TIMEOUT_MS,
 } from './config';
 import {
-  DECIDED,
-  executionFailure,
+  executionOf,
+  isDecision,
   phaseOf,
+  settledAs,
   statusNameOf,
+  type Execution,
   type Phase,
 } from './receipt';
 import { loadSessionKey } from './session';
@@ -52,13 +57,23 @@ export interface TxUpdate {
   phase: Phase;
   hash?: string;
   statusName?: string;
+  message?: string;
 }
 
 export interface TxOutcome {
+  /**
+   * True only when the validators accepted the transaction AND the transaction carries an explicit
+   * successful execution result. An accepted transaction whose contract call raised an error, or
+   * whose result cannot be read, is not ok.
+   */
   ok: boolean;
   hash: string;
   statusName: string;
-  /** Human-readable reason when the transaction was decided but the contract rejected the call. */
+  /** 'accepted' can still be appealed; 'finalized' cannot change. Null when the call did not succeed. */
+  finality: 'accepted' | 'finalized' | null;
+  /** What running the contract call produced, read from the transaction itself. */
+  execution: Execution['state'];
+  /** Human-readable reason when the call did not complete. */
   failure: string | null;
   /** Raw receipt. Only used to extract ids and diagnostics. */
   receipt: unknown;
@@ -214,6 +229,7 @@ export async function sendTransaction(
   const started = Date.now();
   let lastTransaction: unknown = null;
   let lastStatus = 'PENDING';
+  let rereads = 0;
   for (;;) {
     if (signal?.aborted) throw new Error('Stopped watching this transaction. It may still complete on the network.');
     if (Date.now() - started > TX_TIMEOUT_MS) {
@@ -223,8 +239,17 @@ export async function sendTransaction(
       lastTransaction = await readClient().getTransaction({ hash: hash as Hex });
       lastStatus = statusNameOf(lastTransaction);
       const phase = phaseOf(lastStatus);
-      onUpdate({ phase, hash, statusName: lastStatus });
-      if (phase === 'decided' || phase === 'failed') break;
+      if (isDecision(phase) && phase !== 'failed' && executionOf(lastTransaction).state === 'unknown' && rereads < EXECUTION_REREADS) {
+        // The status can move before the execution result is attached to the transaction. Read it again
+        // instead of guessing, and keep the panel in the consensus step meanwhile.
+        rereads += 1;
+        onUpdate({ phase: 'consensus', hash, statusName: lastStatus });
+      } else if (isDecision(phase)) {
+        // Do not announce a decision yet: whether it counts as completed depends on the execution result.
+        break;
+      } else {
+        onUpdate({ phase, hash, statusName: lastStatus });
+      }
     } catch (error) {
       // The transaction may not be indexed for a moment after submission. Keep polling unless it persists.
       if (Date.now() - started > 45_000 && !TRANSIENT.test(messageOf(error))) {
@@ -234,13 +259,87 @@ export async function sendTransaction(
     await sleep(TX_POLL_INTERVAL_MS);
   }
 
-  const decided = DECIDED.has(lastStatus);
-  const failure = decided
-    ? executionFailure(lastTransaction)
-    : `The validators did not reach agreement (${lastStatus.toLowerCase().replace(/_/g, ' ')}). Nothing was written. Try again.`;
-  const outcome: TxOutcome = { ok: decided && failure === null, hash, statusName: lastStatus, failure, receipt: lastTransaction };
-  onUpdate({ phase: outcome.ok ? 'decided' : 'failed', hash, statusName: lastStatus });
+  const outcome = outcomeOf(hash, lastStatus, lastTransaction);
+  onUpdate({
+    phase: outcome.ok ? (outcome.finality ?? 'accepted') : 'failed',
+    hash,
+    statusName: lastStatus,
+    message: outcome.failure ?? undefined,
+  });
   return outcome;
+}
+
+/**
+ * Turn a decided (or failed) transaction into the one thing the UI may show. Completion needs two
+ * separate facts: the validators decided (ACCEPTED or FINALIZED) and the contract call itself ran
+ * successfully. The second is never assumed.
+ */
+export function outcomeOf(hash: string, statusName: string, transaction: unknown): TxOutcome {
+  const phase = phaseOf(statusName);
+  if (phase === 'failed' || !isDecision(phase)) {
+    return {
+      ok: false,
+      hash,
+      statusName,
+      finality: null,
+      execution: 'unknown',
+      failure: `The validators did not reach agreement (${statusName.toLowerCase().replace(/_/g, ' ')}). Nothing was written. Try again.`,
+      receipt: transaction,
+    };
+  }
+  const execution = executionOf(transaction);
+  const finality = settledAs(statusName, execution);
+  let failure: string | null = null;
+  if (execution.state === 'failed') failure = execution.message;
+  else if (execution.state === 'unknown') {
+    failure =
+      'The network decided this transaction, but its execution result could not be read, so it is not reported as completed. Open it in the explorer to check.';
+  }
+  return { ok: finality !== null, hash, statusName, finality, execution: execution.state, failure, receipt: transaction };
+}
+
+/**
+ * Keep reading an ACCEPTED transaction until it is FINALIZED. Updates are only informational: the
+ * transaction was already reported as accepted. A transaction that stops being accepted (for
+ * example because an appeal overturned it) is reported as failed.
+ */
+export async function watchFinality(
+  hash: string,
+  onUpdate: (update: TxUpdate) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const started = Date.now();
+  for (;;) {
+    await sleep(FINALITY_POLL_INTERVAL_MS);
+    if (signal?.aborted || Date.now() - started > FINALITY_TIMEOUT_MS) return;
+    try {
+      const transaction = await readClient().getTransaction({ hash: hash as Hex });
+      const statusName = statusNameOf(transaction);
+      const phase = phaseOf(statusName);
+      if (phase === 'finalized') {
+        const outcome = outcomeOf(hash, statusName, transaction);
+        onUpdate(
+          outcome.ok
+            ? { phase: 'finalized', hash, statusName }
+            : { phase: 'failed', hash, statusName, message: outcome.failure ?? undefined },
+        );
+        return;
+      }
+      if (phase === 'failed') {
+        onUpdate({
+          phase: 'failed',
+          hash,
+          statusName,
+          message: `This transaction was accepted earlier but is now ${statusName.toLowerCase().replace(/_/g, ' ')}. Treat its result as not recorded.`,
+        });
+        return;
+      }
+      // Still accepted, or reopened for an appeal. Either way it is not final.
+      onUpdate({ phase: 'accepted', hash, statusName });
+    } catch {
+      // A missed poll changes nothing; the next one will read it.
+    }
+  }
 }
 
 function friendlyWriteError(error: unknown): string {
