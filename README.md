@@ -24,7 +24,7 @@ Target network: **GenLayer Studionet** (chain ID 61999). The web console is a st
 
 - **Live site:** <https://goalpost-8wf.pages.dev/>
 - **Source:** <https://github.com/reza9133/goalpost>
-- **Contract:** `0xF9545b0b3A58F8e68F2D879E23A4Bc78A9B025B9` on Studionet, with a recorded end-to-end run in [`evidence/`](evidence/README.md)
+- **Contract:** `0xe0167DeFD7b55bd4C120092Ee340078077186c3f` on Studionet (contract 1.3.0), with recorded end-to-end runs for every outcome in [`evidence/`](evidence/README.md)
 
 ## How it works
 
@@ -140,11 +140,11 @@ genlayer network set studionet
 genlayer deploy --contract contracts/goalpost.py
 ```
 
-**Live deployment.** The Studionet contract used for the first reference run is
-`0xF9545b0b3A58F8e68F2D879E23A4Bc78A9B025B9` (contract 1.2.0). Its full lifecycle run (register, submit,
-evaluate, verdict `KEPT`, standing `HELD`) is recorded in [`evidence/`](evidence/README.md). Contract 1.3.0
-(publisher authority, per-element consensus) is a new deployment: deploy it, redeploy the site so the demonstration
-pledge pages carry their declaration, then run `npm run evidence` to record every outcome.
+**Live deployment.** The Studionet contract (version 1.3.0, publisher authority and per-element consensus) is
+`0xe0167DeFD7b55bd4C120092Ee340078077186c3f`. Its recorded runs (kept, silent move, disclosed change, inconclusive and adversarial
+validator disagreement) are in [`evidence/`](evidence/README.md). To deploy your own copy, run
+`npm run deploy:contract -- --write-env`, redeploy the site so the demonstration pledge pages carry their declaration,
+then run `npm run evidence` to record every outcome.
 
 ### 4. Run the web console locally
 
@@ -202,10 +202,10 @@ Read this before you rely on anything. It states what was actually exercised and
 
 | Part | What was done | What was **not** done |
 | --- | --- | --- |
-| Contract | About 200 tests (Python and Node) run the real `goalpost.py` on a simulated runtime (`tests/gensim.py`) that enforces GenVM's rules: no `gl.nondet` outside a block, no storage inside a block, validator majority, rollback on error. Mutation testing: 21 deliberate rule removals were each caught by the suite, and so were the 8 removals of the 1.3.0 rules (publisher scope, declaration, per-element consensus). | Contract 1.3.0 has not executed on real GenVM (1.2.0 did, see `evidence/`). `genvm-lint` not run. The simulator is not GenVM; it verifies logic, not runtime behaviour. |
+| Contract | About 200 tests (Python and Node) run the real `goalpost.py` on a simulated runtime (`tests/gensim.py`) that enforces GenVM's rules: no `gl.nondet` outside a block, no storage inside a block, validator majority, rollback on error. Mutation testing: 21 deliberate rule removals were each caught by the suite, and so were the 8 removals of the 1.3.0 rules (publisher scope, declaration, per-element consensus). | Contract 1.3.0 has run on Studionet (see `evidence/`), but `genvm-lint` was not run. The simulator is not GenVM; it verifies logic, not runtime behaviour. |
 | Evidence pages | Every frozen quote and every excerpt is checked against the page text by the contract's own extractor; every demo report yields its expected verdict under an ideal model. | Real LLMs were not asked. Real model output will vary. |
 | Web console | The logic modules (`receipt`, `chain`, `validate`, `format`, `config`) are type-checked under `strict` with stubs for `genlayer-js`; the receipt, outcome (accepted versus finalized, explicit execution success) and validation logic is unit-tested under Node and parity-tested against the contract. Earlier versions were also bundled with esbuild and exercised in headless Chromium against a fake chain. | The 1.3.0 React changes (`TxPanel`, `tx.tsx`, register, pledge and how pages) were not type-checked or rendered: the npm registry was not reachable when they were written. Not built with Vite, not checked against the real `@types/react`, `react-router-dom` or `genlayer-js` types. The real `genlayer-js` 1.1.8 calls were never executed here. The browser-wallet path (`provider`) is unverified; the session-key path is the default. |
-| Scripts | Syntax-checked; their receipt parser is parity-tested against the client's; the evidence renderer and vote parser are unit-tested. | `evidence.mjs` has not run against the network, so no 1.3.0 live evidence exists yet beyond what `evidence/` lists. |
+| Scripts | Syntax-checked; their receipt parser is parity-tested against the client's; the evidence renderer and vote parser are unit-tested. | `evidence.mjs` has run against Studionet; the records in `evidence/` were written while transactions were `ACCEPTED`, not yet `FINALIZED`. |
 | Cloudflare proxy | Unit-tested with a mocked upstream: method allow-list, origin check, batch and size caps. | Not deployed. |
 
 The first real deployment is the real test. If something fails, [docs/decisions.md](docs/decisions.md)

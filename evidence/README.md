@@ -5,21 +5,21 @@ nothing in this folder is written by hand or generated without a network run (`n
 
 ## Status
 
-| Outcome | Contract | Status | Record |
-| --- | --- | --- | --- |
-| Kept (faithful report) | 1.2.0 at `0xF9545b0b3A58F8e68F2D879E23A4Bc78A9B025B9` | **Recorded** | [`studionet-e2e-kept-2026-10-11.md`](studionet-e2e-kept-2026-10-11.md) |
-| Silent move | 1.3.0 | **To be recorded** with `npm run evidence -- --only silent` | `studionet-e2e-silent-<date>.md` |
-| Disclosed change | 1.3.0 | **To be recorded** with `--only disclosed` | `studionet-e2e-disclosed-<date>.md` |
-| Inconclusive | 1.3.0 | **To be recorded** with `--only inconclusive` | `studionet-e2e-inconclusive-<date>.md` |
-| Adversarial validator disagreement | 1.3.0 | **To be recorded** with `--only adversarial` | `studionet-e2e-adversarial-<date>.md` |
-| Kept, on the 1.3.0 contract | 1.3.0 | **To be recorded** with `--only kept` | `studionet-e2e-kept-<date>.md` |
+All rows are recorded on contract 1.3.0 at `0xe0167DeFD7b55bd4C120092Ee340078077186c3f` (Studionet), on 2026-10-14.
 
-The recorded Kept run predates publisher-authority binding and per-element consensus (contract 1.3.0). Its pledge page
-does not declare its reporting prefix, so it cannot be registered again on 1.3.0. The rows marked "to be recorded" need
-the new contract deployed and the site redeployed (the demonstration pledge pages now carry the declaration, and the
-adversarial endpoint is a Pages Function).
+| Outcome | Status | Record |
+| --- | --- | --- |
+| Kept (faithful report) | **Recorded** | [`studionet-e2e-kept-2026-10-14.md`](studionet-e2e-kept-2026-10-14.md) |
+| Silent move | **Recorded** | [`studionet-e2e-silent-2026-10-14.md`](studionet-e2e-silent-2026-10-14.md) |
+| Disclosed change | **Recorded** | [`studionet-e2e-disclosed-2026-10-14.md`](studionet-e2e-disclosed-2026-10-14.md) |
+| Inconclusive | **Recorded** | [`studionet-e2e-inconclusive-2026-10-14.md`](studionet-e2e-inconclusive-2026-10-14.md) |
+| Adversarial validator disagreement | **Recorded** | [`studionet-e2e-adversarial-2026-10-14.md`](studionet-e2e-adversarial-2026-10-14.md) |
 
-## How to record the rest
+The runs share one contract and used pledge `PLG-0001` for the first four outcomes and `PLG-0002` for the adversarial
+one, so audits and standings accumulate across the files. The records were written while transactions were `ACCEPTED`
+and not yet `FINALIZED`.
+
+## How to record your own
 
 ```bash
 npm install
@@ -45,10 +45,10 @@ What each scenario shows:
 
 A verdict that differs from the expectation is recorded as it is. Real validators and models are not deterministic.
 
-## Verifying the recorded Kept run
+## Verifying the recorded runs
 
-Anyone can check it directly against the Studionet RPC:
+Anyone can check them directly against the Studionet RPC:
 
-- `standing_of("PLG-0001")` returns `"HELD"`.
-- `get_audit_bundle("AUD-0001")` returns the settled audit and its attestation.
-- `stats()` returns `{"audits": 1, "edits_detected": 0, "pledges": 1, "settled": 1, "silent_moves": 0}`.
+- `get_audit_bundle("AUD-0001")` returns the settled Kept audit and its attestation.
+- `standing_of("PLG-0001")` returns the standing after the last run on that pledge (`REVISED`, one silent move on record).
+- `stats()` returns `{"audits": 7, "edits_detected": 0, "pledges": 2, "settled": 7, "silent_moves": 1}` after all five runs.
